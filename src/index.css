@@ -1,1 +1,154 @@
 @import "tailwindcss";
+
+@theme {
+  --font-display: "Bricolage Grotesque", "Instrument Sans", ui-sans-serif, sans-serif;
+  --font-sans: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
+
+  --color-background: #f1f4f0;
+  --color-foreground: #17211d;
+  --color-card: #fbfcfa;
+  --color-card-foreground: #17211d;
+  --color-popover: #fdfefd;
+  --color-popover-foreground: #17211d;
+
+  --color-primary: #15594b;
+  --color-primary-foreground: #eef7f3;
+  --color-primary-soft: #dcebe4;
+
+  --color-secondary: #e7ece7;
+  --color-secondary-foreground: #26332e;
+
+  --color-muted: #e4e9e3;
+  --color-muted-foreground: #5f6d67;
+
+  --color-accent: #b45309;
+  --color-accent-foreground: #fdf6ec;
+  --color-accent-soft: #f7e8d4;
+
+  --color-destructive: #b23a48;
+  --color-destructive-foreground: #fdf1f2;
+  --color-destructive-soft: #f6dfe2;
+
+  --color-border: #d6ded6;
+  --color-input: #c9d4c9;
+  --color-ring: #1c7a63;
+  --color-line: #e3e9e2;
+
+  --color-sidebar: #0d231e;
+  --color-sidebar-deep: #081815;
+  --color-sidebar-soft: #16352c;
+  --color-sidebar-foreground: #dce7e1;
+  --color-sidebar-muted: #8aa39a;
+
+  --radius-sm: 0.4rem;
+  --radius-md: 0.55rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+
+  --shadow-lift: 0 1px 2px rgb(23 33 29 / 0.05), 0 10px 28px -14px rgb(23 33 29 / 0.22);
+  --shadow-pop: 0 2px 6px rgb(23 33 29 / 0.07), 0 24px 48px -16px rgb(23 33 29 / 0.3);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: #15594b;
+  color: #eef7f3;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #b9c6bc transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: #b9c6bc;
+  border-radius: 8px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ---------- ambient layers ---------- */
+.bg-dotgrid {
+  background-image: radial-gradient(rgb(23 33 29 / 0.075) 1px, transparent 1px);
+  background-size: 21px 21px;
+}
+.bg-wash {
+  background:
+    radial-gradient(900px 420px at 85% -10%, rgb(21 89 75 / 0.09), transparent 60%),
+    radial-gradient(700px 380px at -10% 30%, rgb(180 83 9 / 0.06), transparent 55%);
+}
+
+/* ---------- motion ---------- */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.96) translateY(6px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+@keyframes popIn {
+  from { opacity: 0; transform: scale(0.98) translateY(-3px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+@keyframes growX {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+@keyframes softPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgb(180 83 9 / 0.45); }
+  70% { box-shadow: 0 0 0 6px rgb(180 83 9 / 0); }
+}
+@keyframes drift {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+@keyframes sparkle {
+  0%, 100% { opacity: 0.35; transform: scale(0.85) rotate(0deg); }
+  50% { opacity: 1; transform: scale(1.1) rotate(12deg); }
+}
+
+.anim-fade-up { animation: fadeUp 0.55s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.anim-fade-in { animation: fadeIn 0.4s ease both; }
+.anim-scale-in { animation: scaleIn 0.26s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.anim-pop-in { animation: popIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.anim-grow-x { animation: growX 0.9s cubic-bezier(0.16, 1, 0.3, 1) both; transform-origin: left; }
+.anim-drift { animation: drift 5s ease-in-out infinite; }
+.anim-sparkle { animation: sparkle 2.2s ease-in-out infinite; }
+.pulse-gold { animation: softPulse 1.8s ease-out infinite; }
+
+.d1 { animation-delay: 0.05s; }
+.d2 { animation-delay: 0.1s; }
+.d3 { animation-delay: 0.16s; }
+.d4 { animation-delay: 0.22s; }
+.d5 { animation-delay: 0.28s; }
+.d6 { animation-delay: 0.34s; }
+
+/* radix stateful bits */
+.dialog-overlay[data-state="open"] { animation: fadeIn 0.22s ease both; }
+.dialog-overlay[data-state="closed"] { animation: fadeIn 0.15s ease reverse both; }
+.dialog-content[data-state="open"] { animation: scaleIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.pop-content[data-state="open"] { animation: popIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.pop-content[data-state="closed"] { animation: fadeIn 0.12s ease reverse both; }
