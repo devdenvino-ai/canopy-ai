@@ -21,7 +21,7 @@ const buttonVariants = cva(
       variant: {
         default: "bg-primary text-primary-foreground hover:bg-[#4c1d95] shadow-sm",
         soft: "bg-primary-soft text-primary hover:bg-[#ddd0f5]",
-        secondary: "bg-secondary text-secondary-foreground hover:bg-[#dae1da]",
+        secondary: "bg-secondary text-secondary-foreground hover:bg-[#e0dbeb]",
         ghost: "text-foreground/75 hover:bg-secondary hover:text-foreground",
         outline: "border border-border bg-card text-foreground hover:bg-secondary/60",
         destructive: "bg-destructive text-destructive-foreground hover:bg-[#9c2f3d] shadow-sm",
@@ -299,7 +299,7 @@ export function Switch({
   return (
     <SwitchPrimitive.Root
       className={cn(
-        "peer inline-flex h-[22px] w-10 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-primary data-[state=unchecked]:bg-[#c3cdc4]",
+        "peer inline-flex h-[22px] w-10 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-primary data-[state=unchecked]:bg-[#cbc3dd]",
         className,
       )}
       {...props}

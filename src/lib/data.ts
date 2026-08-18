@@ -51,7 +51,7 @@ const p = (t: P): Person => ({
 });
 
 const departments: Department[] = [
-  dept("dept-eng", "Engineering", "#5b21b6", "e01", {
+  dept("dept-eng", "Engineering", "#4c3aae", "e01", {
     mentor: [
       R({ type: "score", factor: "skill", weight: 40 }),
       R({ type: "score", factor: "level", weight: 25 }),

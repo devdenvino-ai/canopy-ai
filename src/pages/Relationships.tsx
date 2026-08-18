@@ -5,8 +5,24 @@ import { deptOf, loadOf, maxAssignsOf, menteesOf, personById, tribeOf } from "..
 import { useStore, useUI } from "../lib/store";
 import type { Person, Role } from "../lib/types";
 import { cn, firstName, initials, toneFor } from "../lib/utils";
-import { Badge, Button, Card, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Seg } from "../components/ui";
+import {
+  Badge,
+  Button,
+  Card,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  Seg,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../components/ui";
 import { LevelBadge } from "../components/bits";
+import { RelationshipsGraph } from "../components/RelationshipsGraph";
 
 function MiniAvatar({ name, size = "h-7 w-7 text-[10px]" }: { name: string; size?: string }) {
   const t = toneFor(name);
@@ -100,7 +116,10 @@ function PickMenteeDialog({
                 <MiniAvatar name={m.name} />
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center gap-2 text-[13px] font-bold">
-                    {m.name} <LevelBadge level={m.level} />
+                    <span className="truncate" title={m.name}>
+                      {m.name}
+                    </span>
+                    <LevelBadge level={m.level} />
                   </span>
                   <span className="block truncate text-[11px] text-muted-foreground">
                     {tribeOf(state, m).name} · {m.location}
@@ -222,6 +241,9 @@ export function RelationshipsPage() {
   const [role, setRole] = useState<Role>("mentor");
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<"all" | "active" | "open">("all");
+  const [view, setView] = useState<"list" | "graph">("list");
+  const [graphDept, setGraphDept] = useState<string>("");
+  const graphDeptObj = state.departments.find((d) => d.id === graphDept) ?? state.departments[0];
 
   const holders = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -254,31 +276,77 @@ export function RelationshipsPage() {
             { value: "reviewer", label: "Reviewer → members" },
           ]}
         />
-        <Seg
-          size="sm"
-          value={filter}
-          onChange={setFilter}
-          options={[
-            { value: "all", label: "All" },
-            { value: "active", label: "With links" },
-            { value: "open", label: "Open capacity" },
-          ]}
-        />
-        <div className="flex h-9 items-center gap-2 rounded-md border border-border bg-card px-2.5 focus-within:border-ring">
-          <Search className="h-3.5 w-3.5 text-muted-foreground" />
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder={`Search ${role}s or their people…`}
-            className="w-44 bg-transparent text-[13px] outline-none placeholder:text-muted-foreground/70"
+        {view === "list" ? (
+          <>
+            <Seg
+              size="sm"
+              value={filter}
+              onChange={setFilter}
+              options={[
+                { value: "all", label: "All" },
+                { value: "active", label: "With links" },
+                { value: "open", label: "Open capacity" },
+              ]}
+            />
+            <div className="flex h-9 items-center gap-2 rounded-md border border-border bg-card px-2.5 focus-within:border-ring">
+              <Search className="h-3.5 w-3.5 text-muted-foreground" />
+              <input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder={`Search ${role}s or their people…`}
+                className="w-44 bg-transparent text-[13px] outline-none placeholder:text-muted-foreground/70"
+              />
+            </div>
+            <span className="font-mono text-[11px] font-bold tabular-nums text-muted-foreground">
+              {totalLinks} {role === "mentor" ? "mentorship" : "review"} links · {holders.length} {role}s
+            </span>
+          </>
+        ) : (
+          <>
+            <Select value={graphDeptObj.id} onValueChange={setGraphDept}>
+              <SelectTrigger className="w-52">
+                <SelectValue placeholder="Pick a department" />
+              </SelectTrigger>
+              <SelectContent>
+                {state.departments.map((d) => (
+                  <SelectItem key={d.id} value={d.id}>
+                    <span className="flex items-center gap-2">
+                      <span className="h-2 w-2 rounded-full" style={{ backgroundColor: d.color }} />
+                      {d.name}
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <span className="font-mono text-[11px] font-bold tabular-nums text-muted-foreground">
+              {totalLinks} {role === "mentor" ? "mentorship" : "review"} links org-wide
+            </span>
+          </>
+        )}
+        <span className="ml-auto">
+          <Seg
+            value={view}
+            onChange={setView}
+            options={[
+              { value: "list", label: "List" },
+              { value: "graph", label: "Graph" },
+            ]}
           />
-        </div>
-        <span className="ml-auto font-mono text-[11px] font-bold tabular-nums text-muted-foreground">
-          {totalLinks} {role === "mentor" ? "mentorship" : "review"} links · {holders.length} {role}s
         </span>
       </div>
 
-      <div className="space-y-2.5">
+      {view === "graph" && (
+        <Card className="anim-fade-up overflow-hidden">
+          <div className="border-b border-line px-4 py-2.5 text-[11.5px] font-semibold text-muted-foreground">
+            {graphDeptObj.name} · every {role} link drawn from holder to member — dotted stubs point to {role}s held in other departments.
+          </div>
+          <div className="p-4">
+            <RelationshipsGraph role={role} deptId={graphDeptObj.id} />
+          </div>
+        </Card>
+      )}
+
+      <div className={cn("space-y-2.5", view === "graph" && "hidden")}>
         {holders.map((h, i) => (
           <HolderRow key={`${role}-${h.person.id}`} holder={h.person} role={role} index={i} />
         ))}

@@ -39,13 +39,13 @@ export function timeAgo(ts: number): string {
 /** Deterministic muted tone pairs for avatars and skill chips. */
 export const TONES: { bg: string; fg: string }[] = [
   { bg: "#ece4fa", fg: "#5b21b6" },
+  { bg: "#e7e1f5", fg: "#5a4a8a" },
+  { bg: "#dfe3f5", fg: "#44508c" },
+  { bg: "#f0e2ef", fg: "#7a3f74" },
+  { bg: "#e6e9f3", fg: "#4a5a80" },
   { bg: "#f7e8d4", fg: "#92400e" },
-  { bg: "#dfe7f2", fg: "#33517a" },
-  { bg: "#eadff0", fg: "#6b4a80" },
-  { bg: "#d9ecef", fg: "#155e6b" },
-  { bg: "#f0e2e0", fg: "#8a4a3f" },
-  { bg: "#e5ecd6", fg: "#4c6524" },
-  { bg: "#e2e2f0", fg: "#4a4a80" },
+  { bg: "#eee4f2", fg: "#6b4a86" },
+  { bg: "#e3e8ee", fg: "#47576b" },
 ];
 
 export function toneFor(key: string) {

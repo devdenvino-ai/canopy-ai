@@ -1,292 +1,416 @@
-import { useMemo, useState } from "react";
-import { personById, personIssues, peopleInTribe } from "../lib/scoring";
+import { useMemo, useRef, useState } from "react";
+import { GraduationCap, ShieldCheck } from "lucide-react";
+import type { Department, Person, Tribe } from "../lib/types";
 import { useStore, useUI } from "../lib/store";
-import type { Department, Person } from "../lib/types";
-import { cn, initials, toneFor } from "../lib/utils";
+import { initials, toneFor } from "../lib/utils";
+import { personIssues, personById } from "../lib/scoring";
 
-const DEPT_X = 18;
-const TRIB_X = 252;
-const MEM_X = 474;
-const NODE_W = 196;
-const NODE_H = 46;
-const ROW_H = 58;
-const PAD = 22;
+export type GraphDir = "horizontal" | "vertical";
 
-interface NodePos {
+const ell = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1).trimEnd() + "…" : s);
+
+interface TipState {
   x: number;
   y: number;
+  person: Person;
 }
 
-function truncate(s: string, n: number) {
-  return s.length > n ? `${s.slice(0, n - 1)}…` : s;
+interface NodeRect {
+  id: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  cy: number;
 }
 
-export function DeptGraph({ dept }: { dept: Department }) {
+/** Layouts both directions. Horizontal: dept left → tribes middle → members right. */
+function computeLayout(
+  dept: Department,
+  tribes: Tribe[],
+  byTribe: Record<string, Person[]>,
+  dir: GraphDir,
+) {
+  if (dir === "vertical") {
+    const colW = 252;
+    const W = Math.max(760, tribes.length * colW + 16);
+    const maxRows = Math.max(1, ...tribes.map((t) => byTribe[t.id]?.length ?? 0));
+    const H = 190 + maxRows * 46 + 40;
+    const deptX = W / 2 - 80;
+    const tribeNodes: NodeRect[] = tribes.map((t, i) => ({
+      id: t.id,
+      x: 16 + i * colW,
+      y: 122,
+      w: colW - 28,
+      h: 48,
+      cy: 146,
+    }));
+    const memberNodes: NodeRect[] = tribes.flatMap((t, ti) =>
+      (byTribe[t.id] ?? []).map((p, ri) => ({
+        id: p.id,
+        x: 16 + ti * colW + 12,
+        y: 196 + ri * 46,
+        w: colW - 52,
+        h: 40,
+        cy: 216 + ri * 46,
+      })),
+    );
+    return { W, H, dept: { x: deptX, y: 26, w: 160, h: 68, cy: 60 }, tribeNodes, memberNodes, dir };
+  }
+
+  // horizontal
+  const W = 768;
+  const ROW = 46;
+  const GAP = 18;
+  const PAD = 22;
+  const bands = tribes.map((t) => ({ tribe: t, h: Math.max((byTribe[t.id]?.length ?? 0) * ROW + 20, 68) }));
+  const H = Math.max(340, bands.reduce((s, b) => s + b.h, 0) + GAP * (bands.length - 1) + PAD * 2);
+  const deptY = H / 2 - 38;
+  let cursor = PAD;
+  const tribeNodes: NodeRect[] = [];
+  const memberNodes: NodeRect[] = [];
+  bands.forEach((b) => {
+    tribeNodes.push({ id: b.tribe.id, x: 238, y: cursor + b.h / 2 - 24, w: 192, h: 48, cy: cursor + b.h / 2 });
+    (byTribe[b.tribe.id] ?? []).forEach((p, i) => {
+      memberNodes.push({ id: p.id, x: 478, y: cursor + 10 + i * ROW, w: 278, h: 40, cy: cursor + 30 + i * ROW });
+    });
+    cursor += b.h + GAP;
+  });
+  return { W, H, dept: { x: 8, y: deptY, w: 176, h: 76, cy: H / 2 }, tribeNodes, memberNodes, dir };
+}
+
+export function DeptGraph({ dept, dir = "horizontal" }: { dept: Department; dir?: GraphDir }) {
   const { state } = useStore();
   const { openPerson } = useUI();
+  const svgRef = useRef<SVGSVGElement>(null);
   const [hoverId, setHoverId] = useState<string | null>(null);
+  const [tip, setTip] = useState<TipState | null>(null);
 
-  const layout = useMemo(() => {
-    const tribes = state.tribes.filter((t) => t.departmentId === dept.id);
-    const pos = new Map<string, NodePos>();
-    const tribePos = new Map<string, NodePos>();
-    const tribeSizes = new Map<string, number>();
-    let y = PAD;
-    const rows: { tribeId: string; person: Person; y: number }[] = [];
+  const tribes = useMemo(() => state.tribes.filter((t) => t.departmentId === dept.id), [state.tribes, dept.id]);
+  const byTribe = useMemo(() => {
+    const map: Record<string, Person[]> = {};
+    tribes.forEach((t) => {
+      map[t.id] = state.people.filter((p) => p.tribeId === t.id).sort((a, b) => b.level - a.level || a.name.localeCompare(b.name));
+    });
+    return map;
+  }, [state.people, tribes]);
 
-    for (const t of tribes) {
-      const members = peopleInTribe(state, t.id).sort((a, b) => b.level - a.level || a.name.localeCompare(b.name));
-      tribeSizes.set(t.id, members.length);
-      if (members.length === 0) {
-        tribePos.set(t.id, { x: TRIB_X, y: y + NODE_H / 2 });
-        y += ROW_H;
-        continue;
-      }
-      const startY = y;
-      for (const m of members) {
-        pos.set(m.id, { x: MEM_X, y });
-        rows.push({ tribeId: t.id, person: m, y });
-        y += ROW_H;
-      }
-      tribePos.set(t.id, { x: TRIB_X, y: (startY + y - ROW_H) / 2 + NODE_H / 2 });
-    }
+  const layout = useMemo(() => computeLayout(dept, tribes, byTribe, dir), [dept, tribes, byTribe, dir]);
+  const { W, H } = layout;
+  const horizontal = dir === "horizontal";
 
-    const height = Math.max(y + PAD, 260);
-    const deptY = height / 2 - NODE_H / 2;
-    return { tribes, pos, tribePos, tribeSizes, rows, height, deptY, width: MEM_X + NODE_W + 132 };
-  }, [state, dept.id]);
+  const nodeById = useMemo(() => {
+    const m = new Map<string, NodeRect>();
+    layout.tribeNodes.forEach((n) => m.set(n.id, n));
+    layout.memberNodes.forEach((n) => m.set(n.id, n));
+    return m;
+  }, [layout]);
 
-  const hoverPerson = hoverId ? personById(state, hoverId) : undefined;
-  const related = useMemo(() => {
-    if (!hoverPerson) return null;
-    const set = new Set<string>([hoverPerson.id]);
-    if (hoverPerson.mentorId) set.add(hoverPerson.mentorId);
-    if (hoverPerson.reviewerId) set.add(hoverPerson.reviewerId);
-    for (const p of state.people) {
-      if (p.mentorId === hoverPerson.id || p.reviewerId === hoverPerson.id) set.add(p.id);
-    }
-    return set;
-  }, [hoverPerson, state.people]);
-
-  const dimmed = (id: string) => related !== null && !related.has(id);
-
-  const mentorEdges = layout.rows
-    .filter((r) => r.person.mentorId && layout.pos.has(r.person.mentorId))
-    .map((r) => ({ from: layout.pos.get(r.person.mentorId!)!, to: layout.pos.get(r.person.id)!, id: `m-${r.person.id}` }));
-  const reviewerEdges = layout.rows
-    .filter((r) => r.person.reviewerId && layout.pos.has(r.person.reviewerId))
-    .map((r) => ({ from: layout.pos.get(r.person.reviewerId!)!, to: layout.pos.get(r.person.id)!, id: `r-${r.person.id}` }));
-
-  const edgeActive = (personId: string) =>
-    related !== null && (related.has(personId) || personId === hoverId);
-
-  const bulgePath = (a: NodePos, b: NodePos, bulge: number) => {
-    const x = MEM_X + NODE_W;
-    const y1 = a.y + NODE_H / 2;
-    const y2 = b.y + NODE_H / 2;
-    return `M ${x} ${y1} C ${x + bulge} ${y1}, ${x + bulge} ${y2}, ${x + 6} ${y2}`;
+  const onMove = (e: React.MouseEvent, person: Person) => {
+    const rect = svgRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    setTip({
+      x: Math.min(Math.max(8, e.clientX - rect.left + 14), W - 232),
+      y: Math.min(Math.max(8, e.clientY - rect.top + 12), H - 118),
+      person,
+    });
+    setHoverId(person.id);
   };
+  const clear = () => {
+    setTip(null);
+    setHoverId(null);
+  };
+
+  const mentorOf = (p: Person) => personById(state, p.mentorId ?? null);
+  const reviewerOf = (p: Person) => personById(state, p.reviewerId ?? null);
+
+  const related = (p: Person): Set<string> => {
+    const s = new Set<string>([p.id]);
+    if (p.mentorId) s.add(p.mentorId);
+    if (p.reviewerId) s.add(p.reviewerId);
+    state.people.forEach((o) => {
+      if (o.mentorId === p.id || o.reviewerId === p.id) s.add(o.id);
+    });
+    return s;
+  };
+  const activeSet = useMemo(() => {
+    if (!hoverId) return null;
+    const hp = state.people.find((p) => p.id === hoverId);
+    return hp ? related(hp) : null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hoverId, state.people]);
+
+  const dim = (id: string) => (activeSet ? (activeSet.has(id) ? 1 : 0.22) : 1);
+
+  const linkPath = (from: NodeRect, to: NodeRect, kind: "mentor" | "reviewer") => {
+    const isTribeTarget = layout.tribeNodes.some((t) => t.id === to.id);
+    if (horizontal) {
+      if (isTribeTarget) {
+        // curve from member's left edge to the tribe node's right edge
+        return `M ${from.x} ${from.cy} C ${from.x - 96} ${from.cy}, ${to.x + to.w + 56} ${to.cy}, ${to.x + to.w} ${to.cy}`;
+      }
+      const bend = kind === "mentor" ? 78 : 116;
+      return `M ${from.x} ${from.cy} C ${from.x - bend} ${from.cy}, ${to.x - bend} ${to.cy}, ${to.x} ${to.cy}`;
+    }
+    const x1 = from.x;
+    const y1 = from.cy - from.h / 2;
+    const x2 = to.x;
+    const y2 = isTribeTarget ? to.y + to.h : to.cy - to.h / 2;
+    return `M ${x1} ${y1} C ${x1} ${y1 - (kind === "mentor" ? 30 : 46)}, ${x2} ${y2 + (kind === "mentor" ? 30 : 46)}, ${x2} ${y2}`;
+  };
+
+  const hierarchyPath = (x1: number, y1: number, x2: number, y2: number) => {
+    if (horizontal) {
+      const dx = Math.min(56, (x2 - x1) / 2);
+      return `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
+    }
+      const dy = Math.min(44, (y2 - y1) / 2);
+      return `M ${x1} ${y1} C ${x1} ${y1 + dy}, ${x2} ${y2 - dy}, ${x2} ${y2}`;
+  };
+
+  const memberLinks = useMemo(() => {
+    const rows: { key: string; d: string; kind: "mentor" | "reviewer"; from: string; to: string }[] = [];
+    layout.memberNodes.forEach((n) => {
+      const p = personById(state, n.id);
+      if (!p) return;
+      const m = mentorOf(p);
+      const r = reviewerOf(p);
+      const mNode = m ? nodeById.get(m.id) : undefined;
+      const rNode = r ? nodeById.get(r.id) : undefined;
+      if (m && mNode) rows.push({ key: `${p.id}-m`, d: linkPath(n, mNode, "mentor"), kind: "mentor", from: p.id, to: m.id });
+      if (r && rNode) rows.push({ key: `${p.id}-r`, d: linkPath(n, rNode, "reviewer"), kind: "reviewer", from: p.id, to: r.id });
+    });
+    return rows;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [layout, state.people, nodeById]);
 
   return (
     <div className="relative">
-      {/* legend */}
-      <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 px-1 text-[11px] font-semibold text-muted-foreground">
-        <span className="flex items-center gap-1.5">
-          <span className="h-0.5 w-5 rounded bg-border" /> hierarchy
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="h-0.5 w-5 rounded bg-primary" /> mentor → mentee
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="h-0 w-5 border-t-2 border-dashed border-accent" /> reviewer → member
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="h-3 w-1 rounded-full bg-accent" /> needs attention
-        </span>
-        <span className="ml-auto hidden font-mono text-[10px] text-muted-foreground/70 sm:block">
-          click a member to assign
-        </span>
-      </div>
+      <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} className="block w-full" style={{ minHeight: 300 }}>
+        {/* hierarchy edges */}
+        {layout.tribeNodes.map((t, i) => (
+          <path
+            key={`dt-${t.id}`}
+            d={hierarchyPath(
+              horizontal ? layout.dept.x + layout.dept.w : layout.dept.x + layout.dept.w / 2,
+              horizontal ? layout.dept.cy : layout.dept.y + layout.dept.h,
+              horizontal ? t.x : t.x + t.w / 2,
+              horizontal ? t.cy : t.y,
+            )}
+            fill="none"
+            stroke="#ddd8e8"
+            strokeWidth={1.5}
+            strokeDasharray={1}
+            pathLength={1}
+            className="anim-draw-line"
+            style={{ animationDelay: `${i * 70}ms` }}
+          />
+        ))}
+        {layout.memberNodes.map((n, i) => {
+          const p = personById(state, n.id);
+          const tNode = p ? layout.tribeNodes.find((t) => t.id === p.tribeId) : undefined;
+          if (!tNode) return null;
+          return (
+            <path
+              key={`tm-${n.id}`}
+              d={hierarchyPath(
+                horizontal ? tNode.x + tNode.w : tNode.x + tNode.w / 2,
+                horizontal ? tNode.cy : tNode.y + tNode.h,
+                horizontal ? n.x : n.x,
+                horizontal ? n.cy : n.cy - n.h / 2,
+              )}
+              fill="none"
+              stroke="#ddd8e8"
+              strokeWidth={1.2}
+              strokeDasharray={1}
+              pathLength={1}
+              className="anim-draw-line"
+              style={{ animationDelay: `${120 + Math.min(i, 12) * 40}ms` }}
+            />
+          );
+        })}
 
-      <div className="overflow-x-auto rounded-lg border border-line bg-card/60">
-        <div className="relative min-w-fit" style={{ height: layout.height }}>
-          <svg width={layout.width} height={layout.height} className="block">
-            {/* hierarchy edges */}
-            {layout.tribes.map((t) => {
-              const tp = layout.tribePos.get(t.id)!;
-              return (
-                <path
-                  key={`h-${t.id}`}
-                  d={`M ${DEPT_X + 148} ${layout.deptY + NODE_H / 2} C ${DEPT_X + 190} ${layout.deptY + NODE_H / 2}, ${TRIB_X - 44} ${tp.y}, ${TRIB_X - 4} ${tp.y}`}
-                  stroke="#ddd8e8"
-                  strokeWidth={1.5}
-                  fill="none"
-                />
-              );
-            })}
-            {layout.rows.map((r) => {
-              const tp = layout.tribePos.get(r.tribeId)!;
-              return (
-                <path
-                  key={`t-${r.person.id}`}
-                  d={`M ${TRIB_X + NODE_W - 24} ${tp.y} C ${TRIB_X + NODE_W + 16} ${tp.y}, ${MEM_X - 40} ${r.y + NODE_H / 2}, ${MEM_X - 4} ${r.y + NODE_H / 2}`}
-                  stroke="#ddd8e8"
-                  strokeWidth={1.2}
-                  fill="none"
-                />
-              );
-            })}
+        {/* mentor / reviewer relationship links */}
+        {memberLinks.map((l) => {
+          const on = activeSet ? activeSet.has(l.from) && activeSet.has(l.to) : true;
+          return (
+            <path
+              key={l.key}
+              d={l.d}
+              fill="none"
+              stroke={l.kind === "mentor" ? "#5b21b6" : "#b45309"}
+              strokeWidth={hoverId && on ? 2.2 : 1.6}
+              strokeDasharray={l.kind === "reviewer" ? "5 4" : undefined}
+              opacity={on ? (l.kind === "mentor" ? 0.8 : 0.75) : 0.08}
+              style={{ transition: "opacity 0.2s ease, stroke-width 0.2s ease" }}
+            />
+          );
+        })}
 
-            {/* reviewer edges (dashed, behind) */}
-            {reviewerEdges.map((e, i) => (
-              <path
-                key={e.id}
-                d={bulgePath(e.from, e.to, 86)}
-                stroke="#b45309"
-                strokeWidth={edgeActive(e.id.slice(2)) || !related ? 1.6 : 1.2}
-                strokeDasharray="5 4"
-                fill="none"
-                pathLength={1}
-                className="anim-draw-line"
-                style={{ animationDelay: `${0.3 + i * 0.03}s`, opacity: related && !edgeActive(e.id.slice(2)) ? 0.15 : 0.75 }}
-              />
-            ))}
-            {/* mentor edges */}
-            {mentorEdges.map((e, i) => (
-              <path
-                key={e.id}
-                d={bulgePath(e.from, e.to, 48)}
-                stroke="#7c3aed"
-                strokeWidth={edgeActive(e.id.slice(2)) || !related ? 2 : 1.4}
-                fill="none"
-                pathLength={1}
-                className="anim-draw-line"
-                style={{ animationDelay: `${0.2 + i * 0.03}s`, opacity: related && !edgeActive(e.id.slice(2)) ? 0.15 : 0.9 }}
-              />
-            ))}
+        {/* dept node */}
+        <g className="anim-node-in">
+          <rect x={layout.dept.x} y={layout.dept.y} width={layout.dept.w} height={layout.dept.h} rx={14} fill="#191227" />
+          <circle cx={layout.dept.x + 24} cy={layout.dept.cy} r={5} fill={dept.color} className="anim-sparkle" style={{ transformOrigin: `${layout.dept.x + 24}px ${layout.dept.cy}px` }} />
+          <text x={layout.dept.x + 40} y={layout.dept.cy - 4} fontSize={13} fontWeight={700} fill="#f3eefc" fontFamily="Bricolage Grotesque, sans-serif">
+            {ell(dept.name, horizontal ? 15 : 17)}
+          </text>
+          <text x={layout.dept.x + 40} y={layout.dept.cy + 14} fontSize={10} fill="#9d94bd" fontFamily="JetBrains Mono, monospace">
+            {tribes.length} tribes · {layout.memberNodes.length} people
+          </text>
+        </g>
 
-            {/* department node */}
-            <g className="anim-node-in">
-              <rect x={DEPT_X} y={layout.deptY} width={148} height={NODE_H + 8} rx={12} fill="#191227" />
-              <rect x={DEPT_X} y={layout.deptY} width={5} height={NODE_H + 8} rx={2.5} fill={dept.color} />
-              <text x={DEPT_X + 16} y={layout.deptY + 24} fontSize={12.5} fontWeight={700} fill="#f3eefc" fontFamily="Bricolage Grotesque, sans-serif">
-                {truncate(dept.name, 15)}
+        {/* tribe nodes */}
+        {layout.tribeNodes.map((t, i) => {
+          const tribe = tribes.find((x) => x.id === t.id)!;
+          const lead = personById(state, tribe.leadId);
+          const count = byTribe[tribe.id]?.length ?? 0;
+          return (
+            <g key={t.id} className="anim-node-in" style={{ animationDelay: `${i * 60}ms` }}>
+              <rect x={t.x} y={t.y} width={t.w} height={t.h} rx={11} fill="#ece9f3" stroke="#ddd8e8" />
+              <circle cx={t.x + 18} cy={t.cy} r={4} fill={dept.color} />
+              <text x={t.x + 30} y={t.cy - 2} fontSize={11.5} fontWeight={700} fill="#201a2e">
+                {ell(tribe.name, 16)}
               </text>
-              <text x={DEPT_X + 16} y={layout.deptY + 41} fontSize={10} fill="#9d94bd" fontFamily="JetBrains Mono, monospace">
-                {layout.tribes.length} tribes · {layout.rows.length} people
+              <text x={t.x + 30} y={t.cy + 13} fontSize={9} fill="#6a6480" fontFamily="JetBrains Mono, monospace">
+                {count} ppl{lead ? ` · ${ell(lead.name.split(" ")[0], 10)}` : ""}
               </text>
             </g>
+          );
+        })}
 
-            {/* tribe nodes */}
-            {layout.tribes.map((t, i) => {
-              const tp = layout.tribePos.get(t.id)!;
-              const lead = personById(state, t.leadId);
-              return (
-                <g key={t.id} className="anim-node-in" style={{ animationDelay: `${0.08 + i * 0.05}s` }}>
-                  <rect x={TRIB_X} y={tp.y - NODE_H / 2} width={NODE_W - 24} height={NODE_H} rx={10} fill="#ece9f3" stroke="#ddd8e8" />
-                  <circle cx={TRIB_X + 17} cy={tp.y} r={9} fill={dept.color} opacity={0.16} />
-                  <circle cx={TRIB_X + 17} cy={tp.y} r={3.2} fill={dept.color} />
-                  <text x={TRIB_X + 33} y={tp.y - 2} fontSize={11.5} fontWeight={700} fill="#201a2e">
-                    {truncate(t.name, 16)}
-                  </text>
-                  <text x={TRIB_X + 33} y={tp.y + 13} fontSize={9.5} fill="#6a6480" fontFamily="JetBrains Mono, monospace">
-                    {layout.tribeSizes.get(t.id)} members{lead ? ` · lead ${lead.name.split(" ")[0]}` : ""}
-                  </text>
-                </g>
-              );
-            })}
-
-            {/* member nodes */}
-            {layout.rows.map((r, i) => {
-              const p = r.person;
-              const issues = personIssues(p);
-              const tone = toneFor(p.name);
-              const isDim = dimmed(p.id);
-              return (
-                <g
-                  key={p.id}
-                  className="anim-node-in cursor-pointer"
-                  style={{ animationDelay: `${0.12 + i * 0.025}s`, opacity: isDim ? 0.28 : 1, transition: "opacity 0.2s" }}
-                  onMouseEnter={() => setHoverId(p.id)}
-                  onMouseLeave={() => setHoverId(null)}
-                  onClick={() => openPerson(p.id, issues.includes("mentor") ? "mentor" : "reviewer")}
-                >
-                  <rect
-                    x={MEM_X}
-                    y={r.y}
-                    width={NODE_W}
-                    height={NODE_H}
-                    rx={10}
-                    fill={hoverId === p.id ? "#f3eefc" : "#fcfbfe"}
-                    stroke={hoverId === p.id ? "#7c3aed" : "#ddd8e8"}
-                    strokeWidth={hoverId === p.id ? 1.5 : 1}
-                  />
-                  <rect x={MEM_X} y={r.y} width={4} height={NODE_H} rx={2} fill={issues.length ? "#b45309" : "#5b21b6"} opacity={issues.length ? 1 : 0.5} />
-                  <circle cx={MEM_X + 24} cy={r.y + NODE_H / 2} r={11} fill={tone.bg} />
-                  <text x={MEM_X + 24} y={r.y + NODE_H / 2 + 3} fontSize={8} fontWeight={700} fill={tone.fg} textAnchor="middle">
-                    {initials(p.name)}
-                  </text>
-                  <text x={MEM_X + 42} y={r.y + 19} fontSize={11} fontWeight={700} fill="#201a2e">
-                    {truncate(p.name, 17)}
-                  </text>
-                  <text x={MEM_X + 42} y={r.y + 34} fontSize={9} fill="#6a6480" fontFamily="JetBrains Mono, monospace">
-                    L{p.level} · {truncate(p.location, 12)}
-                  </text>
-                  {(p.isMentor || p.isReviewer) && (
-                    <g>
-                      {p.isMentor && (
-                        <>
-                          <rect x={MEM_X + NODE_W - 40} y={r.y + 8} width={14} height={13} rx={4} fill="#ece4fa" />
-                          <text x={MEM_X + NODE_W - 33} y={r.y + 18} fontSize={8} fontWeight={800} fill="#5b21b6" textAnchor="middle">
-                            M
-                          </text>
-                        </>
-                      )}
-                      {p.isReviewer && (
-                        <>
-                          <rect x={MEM_X + NODE_W - 22} y={r.y + 8} width={14} height={13} rx={4} fill="#f7e8d4" />
-                          <text x={MEM_X + NODE_W - 15} y={r.y + 18} fontSize={8} fontWeight={800} fill="#b45309" textAnchor="middle">
-                            R
-                          </text>
-                        </>
-                      )}
-                    </g>
-                  )}
-                </g>
-              );
-            })}
-          </svg>
-
-          {/* hover tooltip */}
-          {hoverPerson && layout.pos.has(hoverPerson.id) && (
-            <div
-              className="anim-pop-in pointer-events-none absolute z-20 w-56 rounded-lg border border-border bg-popover p-3 shadow-pop"
-              style={
-                layout.pos.get(hoverPerson.id)!.y < 110
-                  ? { left: layout.pos.get(hoverPerson.id)!.x, top: layout.pos.get(hoverPerson.id)!.y + NODE_H + 8 }
-                  : {
-                      left: layout.pos.get(hoverPerson.id)!.x,
-                      top: layout.pos.get(hoverPerson.id)!.y - 8,
-                      transform: "translateY(-100%)",
-                    }
-              }
+        {/* member nodes */}
+        {layout.memberNodes.map((n, i) => {
+          const p = personById(state, n.id)!;
+          const issues = personIssues(p);
+          const mentor = mentorOf(p);
+          const reviewer = reviewerOf(p);
+          const tone = toneFor(p.name);
+          const labelX = n.x + 44;
+          return (
+            <g
+              key={n.id}
+              className="anim-node-in cursor-pointer"
+              style={{ animationDelay: `${140 + Math.min(i, 14) * 35}ms`, opacity: dim(n.id), transition: "opacity 0.2s ease" }}
+              onMouseMove={(e) => onMove(e, p)}
+              onMouseLeave={clear}
+              onClick={() => openPerson(p.id, issues[0] ?? "mentor")}
             >
-              <p className="text-[13px] font-bold">{hoverPerson.name}</p>
-              <p className="font-mono text-[10.5px] text-muted-foreground">
-                L{hoverPerson.level} · {hoverPerson.location} · {hoverPerson.skills.slice(0, 3).join(", ")}
-              </p>
-              <div className="mt-1.5 space-y-0.5 text-[11px]">
-                <p className={cn("font-semibold", hoverPerson.mentorId ? "text-primary" : "text-accent")}>
-                  Mentor: {hoverPerson.mentorId ? personById(state, hoverPerson.mentorId)?.name : "unassigned"}
-                </p>
-                <p className={cn("font-semibold", hoverPerson.reviewerId ? "text-primary" : "text-accent")}>
-                  Reviewer: {hoverPerson.reviewerId ? personById(state, hoverPerson.reviewerId)?.name : "unassigned"}
-                </p>
-              </div>
-            </div>
-          )}
-        </div>
+              <rect
+                x={n.x}
+                y={n.y}
+                width={n.w}
+                height={n.h}
+                rx={10}
+                fill={hoverId === p.id ? "#f3eefc" : "#fcfbfe"}
+                stroke={hoverId === p.id ? "#7c3aed" : "#ddd8e8"}
+                strokeWidth={hoverId === p.id ? 1.5 : 1}
+                style={{ transition: "fill 0.15s ease, stroke 0.15s ease" }}
+              />
+              <rect x={n.x} y={n.y + 6} width={4} height={n.h - 12} rx={2} fill={issues.length ? "#b45309" : "#5b21b6"} opacity={issues.length ? 1 : 0.45} />
+              <circle cx={n.x + 24} cy={n.cy} r={11} fill={tone.bg} />
+              <text x={n.x + 24} y={n.cy + 3.5} fontSize={8.5} fontWeight={800} fill={tone.fg} textAnchor="middle">
+                {initials(p.name)}
+              </text>
+              <text x={labelX} y={n.cy - 2} fontSize={11} fontWeight={700} fill="#201a2e">
+                {ell(p.name, 24)}
+              </text>
+              <text x={labelX} y={n.cy + 13} fontSize={9} fill="#6a6480" fontFamily="JetBrains Mono, monospace">
+                L{p.level} · {ell(p.location, 14)}
+              </text>
+              {/* level + role chips */}
+              <rect x={n.x + n.w - 56} y={n.cy - 8} width={17} height={15} rx={4} fill="#ece4fa" />
+              <text x={n.x + n.w - 47.5} y={n.cy + 3} fontSize={8} fontWeight={800} fill="#5b21b6" textAnchor="middle">
+                L{p.level}
+              </text>
+              {mentor && (
+                <g opacity={activeSet && activeSet.has(mentor.id) ? 1 : 0.9}>
+                  <rect x={n.x + n.w - 36} y={n.cy - 8} width={15} height={15} rx={4} fill="#ece4fa" />
+                  <text x={n.x + n.w - 28.5} y={n.cy + 3.5} fontSize={8} fontWeight={800} fill="#5b21b6" textAnchor="middle">
+                    M
+                  </text>
+                </g>
+              )}
+              {reviewer && (
+                <g>
+                  <rect x={n.x + n.w - 18} y={n.cy - 8} width={15} height={15} rx={4} fill="#f7e8d4" />
+                  <text x={n.x + n.w - 10.5} y={n.cy + 3.5} fontSize={8} fontWeight={800} fill="#b45309" textAnchor="middle">
+                    R
+                  </text>
+                </g>
+              )}
+            </g>
+          );
+        })}
+      </svg>
+
+      {/* legend */}
+      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-[11px] font-semibold text-muted-foreground">
+        <span className="flex items-center gap-1.5">
+          <GraduationCap className="h-3.5 w-3.5 text-primary" />
+          <span className="inline-block h-0 w-5 border-t-2 border-primary" /> mentor → mentee
+        </span>
+        <span className="flex items-center gap-1.5">
+          <ShieldCheck className="h-3.5 w-3.5 text-accent" />
+          <span className="inline-block h-0 w-5 border-t-2 border-dashed border-accent" /> reviewer → member
+        </span>
+        <span className="ml-auto hidden font-mono text-[10px] sm:block">hover to trace · click to assign</span>
       </div>
+
+      {/* tooltip */}
+      {(() => {
+        if (!tip) return null;
+        const tm = mentorOf(tip.person);
+        const tr = reviewerOf(tip.person);
+        return (
+        <div
+          className="anim-pop-in pointer-events-none absolute z-20 w-[224px] rounded-lg border border-border bg-popover p-3 shadow-pop"
+          style={{ left: tip.x, top: tip.y }}
+        >
+          <div className="flex items-center gap-2">
+            <span
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-[10px] font-bold"
+              style={{ backgroundColor: toneFor(tip.person.name).bg, color: toneFor(tip.person.name).fg }}
+            >
+              {initials(tip.person.name)}
+            </span>
+            <div className="min-w-0">
+              <p className="truncate text-xs font-bold" title={tip.person.name}>
+                {tip.person.name}
+              </p>
+              <p className="font-mono text-[10px] text-muted-foreground">
+                L{tip.person.level} · {tip.person.location}
+              </p>
+            </div>
+          </div>
+          <div className="mt-2 space-y-1 text-[11px]">
+            <p className="flex items-center gap-1.5 text-muted-foreground">
+              <GraduationCap className="h-3 w-3 shrink-0 text-primary" />
+              <span className="truncate">
+                {tm ? (
+                  <>
+                    Mentor · <b className="text-foreground">{tm.name}</b>
+                  </>
+                ) : (
+                  <b className="text-accent">No mentor yet</b>
+                )}
+              </span>
+            </p>
+            <p className="flex items-center gap-1.5 text-muted-foreground">
+              <ShieldCheck className="h-3 w-3 shrink-0 text-accent" />
+              <span className="truncate">
+                {tr ? (
+                  <>
+                    Reviewer · <b className="text-foreground">{tr.name}</b>
+                  </>
+                ) : (
+                  <b className="text-accent">No reviewer yet</b>
+                )}
+              </span>
+            </p>
+          </div>
+        </div>
+        );
+      })()}
     </div>
   );
 }

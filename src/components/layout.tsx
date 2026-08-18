@@ -130,8 +130,8 @@ export function Sidebar() {
       <div className="mt-auto space-y-2 border-t border-white/[0.06] p-3">
         <div className="flex items-center gap-2 px-2 py-1">
           <span className="relative flex h-2 w-2">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#6fc0a4] opacity-60" />
-            <span className="relative inline-flex h-2 w-2 rounded-full bg-[#6fc0a4]" />
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#a78bfa] opacity-60" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-[#a78bfa]" />
           </span>
           <p className="text-[11px] font-medium text-sidebar-muted">Autosaved · rules engine live</p>
         </div>

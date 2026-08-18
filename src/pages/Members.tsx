@@ -37,6 +37,7 @@ export function MembersPage() {
   const [sortDir, setSortDir] = useState<1 | -1>(1);
   const [view, setView] = useState<"table" | "graph">("table");
   const [graphDept, setGraphDept] = useState<string>("");
+  const [graphDir, setGraphDir] = useState<"horizontal" | "vertical">("horizontal");
 
   const graphDeptObj = state.departments.find((d) => d.id === graphDept) ?? state.departments[0];
   const graphTribeCount = state.tribes.filter((t) => t.departmentId === graphDeptObj?.id).length;
@@ -205,6 +206,7 @@ export function MembersPage() {
                           <button
                             type="button"
                             onClick={() => openPerson(p.id)}
+                            title={p.name}
                             className="block max-w-[190px] cursor-pointer truncate text-left text-[13.5px] font-bold transition-colors hover:text-primary"
                           >
                             {p.name}
@@ -284,9 +286,20 @@ export function MembersPage() {
               <span className="font-mono text-[11px] font-bold tabular-nums text-muted-foreground">
                 {graphTribeCount} tribes · {graphPeopleCount} people
               </span>
+              <span className="ml-auto">
+                <Seg
+                  size="sm"
+                  value={graphDir}
+                  onChange={setGraphDir}
+                  options={[
+                    { value: "horizontal", label: "Horizontal" },
+                    { value: "vertical", label: "Vertical" },
+                  ]}
+                />
+              </span>
             </div>
             <div className="p-4">
-              <DeptGraph dept={graphDeptObj} />
+              <DeptGraph dept={graphDeptObj} dir={graphDir} />
             </div>
           </>
         )}

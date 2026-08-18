@@ -377,7 +377,7 @@ export function OverviewPage() {
                   <span
                     className={cn(
                       "mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full",
-                      a.tone === "success" ? "bg-primary" : a.tone === "warn" ? "bg-accent" : "bg-[#0c7489]",
+                      a.tone === "success" ? "bg-primary" : a.tone === "warn" ? "bg-accent" : "bg-[#9d8fd0]",
                     )}
                   />
                   <p className="min-w-0 flex-1 text-xs leading-relaxed text-foreground/85">{a.text}</p>
