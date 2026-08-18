@@ -5,6 +5,7 @@ import {
   Network,
   RotateCcw,
   Search,
+  Share2,
   SlidersHorizontal,
   Users,
   type LucideIcon,
@@ -22,9 +23,9 @@ function BrandMark() {
   return (
     <div className="grid h-9 w-9 place-items-center rounded-lg bg-sidebar-soft shadow-[inset_0_1px_0_rgb(255_255_255/0.06)]">
       <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5">
-        <path d="M12 3.2 4.4 7.8l7.6 4.6 7.6-4.6L12 3.2Z" fill="#6fc0a4" />
-        <path d="m4.4 12 7.6 4.6L19.6 12" stroke="#4d9a80" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="m4.4 16.2 7.6 4.6 7.6-4.6" stroke="#2f6f5b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M12 3.2 4.4 7.8l7.6 4.6 7.6-4.6L12 3.2Z" fill="#a78bfa" />
+        <path d="m4.4 12 7.6 4.6L19.6 12" stroke="#8b5cf6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="m4.4 16.2 7.6 4.6 7.6-4.6" stroke="#6d28d9" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     </div>
   );
@@ -35,6 +36,7 @@ function BrandMark() {
 const NAV: { id: Page; label: string; icon: LucideIcon }[] = [
   { id: "overview", label: "Organization", icon: Network },
   { id: "members", label: "Members", icon: Users },
+  { id: "relationships", label: "Relationships", icon: Share2 },
   { id: "mentors", label: "Mentors & Reviewers", icon: GraduationCap },
   { id: "rules", label: "Proposal rules", icon: SlidersHorizontal },
 ];
@@ -72,11 +74,11 @@ export function Sidebar() {
             >
               <span
                 className={cn(
-                  "absolute left-0 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-full bg-[#6fc0a4] transition-all duration-200",
+                  "absolute left-0 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-full bg-[#a78bfa] transition-all duration-200",
                   active ? "opacity-100" : "opacity-0",
                 )}
               />
-              <Icon className={cn("h-4 w-4 transition-colors", active ? "text-[#6fc0a4]" : "")} />
+              <Icon className={cn("h-4 w-4 transition-colors", active ? "text-[#a78bfa]" : "")} />
               {item.label}
               {item.id === "overview" && attention > 0 && (
                 <span className="ml-auto rounded-full bg-accent px-1.5 py-px font-mono text-[10px] font-bold text-accent-foreground">
@@ -270,6 +272,10 @@ const TITLES: Record<Page, { title: string; sub: string }> = {
   members: {
     title: "Members",
     sub: "Everyone across tribes — filter, search, and close coverage gaps.",
+  },
+  relationships: {
+    title: "Relationships",
+    sub: "Every mentor → mentee and reviewer → member link, with room to add more.",
   },
   mentors: {
     title: "Mentors & Reviewers",

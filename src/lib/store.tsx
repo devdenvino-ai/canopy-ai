@@ -1,19 +1,16 @@
-import React, {
-  createContext,
-  useContext,
-  useEffect,
-  useReducer,
-  useState,
-} from "react";
+import React, { createContext, useContext, useEffect, useReducer, useState } from "react";
 import { SEED_VERSION, seedState } from "./data";
-import type { AppState, Person, Role, RuleSet } from "./types";
+import type { AppState, Person, Role, RuleItem, RuleMetric } from "./types";
 
 const STORAGE_KEY = "canopy.state.v1";
 
 export type Action =
   | { type: "assign"; personId: string; role: Role; targetId: string | null }
   | { type: "toggle-role"; personId: string; role: Role }
-  | { type: "update-rules"; deptId: string; role: Role; rules: RuleSet }
+  | { type: "add-rule"; deptId: string; role: Role; metric: RuleMetric }
+  | { type: "update-rule"; deptId: string; role: Role; ruleId: string; patch: Partial<Pick<RuleItem, "enabled">> & { metric?: RuleMetric } }
+  | { type: "remove-rule"; deptId: string; role: Role; ruleId: string }
+  | { type: "copy-rules"; fromDeptId: string; toDeptId: string; role: Role }
   | { type: "reset" };
 
 let actSeq = 0;
@@ -22,8 +19,22 @@ function actId() {
   return `act-${Date.now()}-${actSeq}`;
 }
 
+let ruleSeq = 0;
+function newRuleId() {
+  ruleSeq += 1;
+  return `rule-${Date.now()}-${ruleSeq}`;
+}
+
 function log(state: AppState, text: string, tone: "success" | "info" | "warn"): AppState["activity"] {
   return [{ id: actId(), ts: Date.now(), text, tone }, ...state.activity].slice(0, 14);
+}
+
+function mapDept(state: AppState, deptId: string, fn: (d: AppState["departments"][number]) => AppState["departments"][number]): AppState {
+  return { ...state, departments: state.departments.map((d) => (d.id === deptId ? fn(d) : d)) };
+}
+
+function withRules(state: AppState, deptId: string, role: Role, fn: (items: RuleItem[]) => RuleItem[]): AppState {
+  return mapDept(state, deptId, (d) => ({ ...d, rules: { ...d.rules, [role]: fn(d.rules[role]) } }));
 }
 
 function reducer(state: AppState, action: Action): AppState {
@@ -53,17 +64,37 @@ function reducer(state: AppState, action: Action): AppState {
       }`;
       return { ...state, people, activity: log(state, text, nowOn ? "success" : "info") };
     }
-    case "update-rules": {
+    case "add-rule": {
       const dept = state.departments.find((d) => d.id === action.deptId);
       if (!dept) return state;
-      const departments = state.departments.map((d) =>
-        d.id === action.deptId ? { ...d, rules: { ...d.rules, [action.role]: action.rules } } : d,
+      const next = withRules(state, action.deptId, action.role, (items) => [
+        ...items,
+        { id: newRuleId(), enabled: true, metric: action.metric },
+      ]);
+      return { ...next, activity: log(state, `${dept.name} added a ${action.role} rule`, "info") };
+    }
+    case "update-rule": {
+      return withRules(state, action.deptId, action.role, (items) =>
+        items.map((i) =>
+          i.id === action.ruleId
+            ? { ...i, enabled: action.patch.enabled ?? i.enabled, metric: action.patch.metric ?? i.metric }
+            : i,
+        ),
       );
-      return {
-        ...state,
-        departments,
-        activity: log(state, `${dept.name} · ${action.role} proposal rules updated`, "info"),
-      };
+    }
+    case "remove-rule": {
+      const dept = state.departments.find((d) => d.id === action.deptId);
+      const next = withRules(state, action.deptId, action.role, (items) => items.filter((i) => i.id !== action.ruleId));
+      if (!dept) return next;
+      return { ...next, activity: log(state, `${dept.name} removed a ${action.role} rule`, "warn") };
+    }
+    case "copy-rules": {
+      const from = state.departments.find((d) => d.id === action.fromDeptId);
+      const to = state.departments.find((d) => d.id === action.toDeptId);
+      if (!from || !to) return state;
+      const cloned = from.rules[action.role].map((i) => ({ ...i, id: newRuleId() }));
+      const next = withRules(state, action.toDeptId, action.role, () => cloned);
+      return { ...next, activity: log(state, `${to.name} copied ${action.role} rules from ${from.name}`, "info") };
     }
     case "reset": {
       const fresh = seedState();
@@ -94,7 +125,7 @@ const StoreContext = createContext<{
   dispatch: React.Dispatch<Action>;
 } | null>(null);
 
-export type Page = "overview" | "members" | "mentors" | "rules";
+export type Page = "overview" | "members" | "relationships" | "mentors" | "rules";
 
 const UIContext = createContext<{
   page: Page;

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Sparkles, UserPlus, Users } from "lucide-react";
 import { toast } from "sonner";
-import { deptOf, loadOf, menteesOf, mentorSuggestions, tribeOf } from "../lib/scoring";
+import { deptOf, loadOf, maxAssignsOf, menteesOf, mentorSuggestions, tribeOf } from "../lib/scoring";
 import { useStore } from "../lib/store";
 import type { Person, Role } from "../lib/types";
 import { cn } from "../lib/utils";
@@ -12,11 +12,11 @@ function PersonCard({ person, role, index }: { person: Person; role: Role; index
   const { state, dispatch } = useStore();
   const dept = deptOf(state, person);
   const tribe = tribeOf(state, person);
-  const rules = dept.rules[role];
+  const cap = maxAssignsOf(state, person, role);
   const load = loadOf(state, person.id, role);
   const mentees = menteesOf(state, person.id, role);
-  const pct = Math.min(100, Math.round((load / rules.maxAssigns) * 100));
-  const full = load >= rules.maxAssigns;
+  const pct = Math.min(100, Math.round((load / cap) * 100));
+  const full = load >= cap;
   const active = role === "mentor" ? person.isMentor : person.isReviewer;
   const delays = ["d1", "d2", "d3", "d4", "d5", "d6"];
 
@@ -67,7 +67,7 @@ function PersonCard({ person, role, index }: { person: Person; role: Role; index
               {role === "mentor" ? "Mentee load" : "Review load"}
             </span>
             <span className={cn("font-mono text-[11.5px] font-bold tabular-nums", full ? "text-destructive" : "text-foreground/80")}>
-              {load}/{rules.maxAssigns}
+              {load}/{cap}
             </span>
           </div>
           <Progress value={pct} tone={full ? "danger" : pct >= 75 ? "gold" : "default"} />

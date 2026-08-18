@@ -8,8 +8,8 @@ import { Avatar, Badge } from "./ui";
 
 const LEVEL_STYLE: Record<Level, string> = {
   1: "bg-secondary text-muted-foreground",
-  2: "bg-[#e0e8ec] text-[#42606e]",
-  3: "bg-[#d9e5e8] text-[#205e63]",
+  2: "bg-[#e7e3f3] text-[#55497e]",
+  3: "bg-[#ddd6ef] text-[#45397c]",
   4: "bg-primary-soft text-primary",
   5: "bg-primary text-primary-foreground",
 };
@@ -157,11 +157,11 @@ export function CoverageRing({
   }, [pct]);
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
-  const color = pct >= 90 ? "#15594b" : pct >= 70 ? "#b45309" : "#b23a48";
+  const color = pct >= 90 ? "#5b21b6" : pct >= 70 ? "#b45309" : "#b23a48";
   return (
     <div className={cn("relative inline-flex items-center justify-center", className)} style={{ width: size, height: size }}>
       <svg width={size} height={size} className="-rotate-90">
-        <circle cx={size / 2} cy={size / 2} r={r} stroke="#e2e8e1" strokeWidth={stroke} fill="none" />
+        <circle cx={size / 2} cy={size / 2} r={r} stroke="#e7e3f1" strokeWidth={stroke} fill="none" />
         <circle
           cx={size / 2}
           cy={size / 2}

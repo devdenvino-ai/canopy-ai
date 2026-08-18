@@ -38,7 +38,7 @@ export function timeAgo(ts: number): string {
 
 /** Deterministic muted tone pairs for avatars and skill chips. */
 export const TONES: { bg: string; fg: string }[] = [
-  { bg: "#dcebe4", fg: "#15594b" },
+  { bg: "#ece4fa", fg: "#5b21b6" },
   { bg: "#f7e8d4", fg: "#92400e" },
   { bg: "#dfe7f2", fg: "#33517a" },
   { bg: "#eadff0", fg: "#6b4a80" },

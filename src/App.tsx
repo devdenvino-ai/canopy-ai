@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { GraduationCap, Network, SlidersHorizontal, Users, type LucideIcon } from "lucide-react";
+import { GraduationCap, Network, Share2, SlidersHorizontal, Users, type LucideIcon } from "lucide-react";
 import { Toaster } from "sonner";
 import { PersonDialog } from "./components/PersonDialog";
 import { Sidebar, Topbar } from "./components/layout";
@@ -7,12 +7,14 @@ import { AppProviders, useUI, type Page } from "./lib/store";
 import { cn } from "./lib/utils";
 import { OverviewPage } from "./pages/Overview";
 import { MembersPage } from "./pages/Members";
+import { RelationshipsPage } from "./pages/Relationships";
 import { MentorsPage } from "./pages/Mentors";
 import { RulesPage } from "./pages/Rules";
 
 const MOBILE_NAV: { id: Page; label: string; icon: LucideIcon }[] = [
   { id: "overview", label: "Org", icon: Network },
   { id: "members", label: "Members", icon: Users },
+  { id: "relationships", label: "Links", icon: Share2 },
   { id: "mentors", label: "Mentors", icon: GraduationCap },
   { id: "rules", label: "Rules", icon: SlidersHorizontal },
 ];
@@ -60,6 +62,7 @@ function Shell() {
               >
                 {page === "overview" && <OverviewPage />}
                 {page === "members" && <MembersPage />}
+                {page === "relationships" && <RelationshipsPage />}
                 {page === "mentors" && <MentorsPage />}
                 {page === "rules" && <RulesPage />}
               </motion.div>

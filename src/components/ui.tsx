@@ -19,8 +19,8 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-[#0f4a3e] shadow-sm",
-        soft: "bg-primary-soft text-primary hover:bg-[#cbe0d6]",
+        default: "bg-primary text-primary-foreground hover:bg-[#4c1d95] shadow-sm",
+        soft: "bg-primary-soft text-primary hover:bg-[#ddd0f5]",
         secondary: "bg-secondary text-secondary-foreground hover:bg-[#dae1da]",
         ghost: "text-foreground/75 hover:bg-secondary hover:text-foreground",
         outline: "border border-border bg-card text-foreground hover:bg-secondary/60",
@@ -116,7 +116,7 @@ export function DialogContent({
 }) {
   return (
     <DialogPrimitive.Portal>
-      <DialogPrimitive.Overlay className="dialog-overlay fixed inset-0 z-50 bg-[#0d231e]/50 backdrop-blur-[2px]" />
+      <DialogPrimitive.Overlay className="dialog-overlay fixed inset-0 z-50 bg-[#191227]/50 backdrop-blur-[2px]" />
       <DialogPrimitive.Content className="pointer-events-none fixed inset-0 z-50 overflow-y-auto">
         <div className="grid min-h-full place-items-center p-4 sm:py-10">
           <div

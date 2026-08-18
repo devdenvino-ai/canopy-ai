@@ -1,6 +1,13 @@
-import type { AppState, Department, Level, Person, Tribe } from "./types";
+import type { AppState, Department, Level, Person, RuleItem, RuleMetric, Tribe } from "./types";
 
-export const SEED_VERSION = 3;
+export const SEED_VERSION = 4;
+
+/* Rule items are built sequentially per seed — ids stay stable once persisted. */
+let rs = 0;
+const R = (metric: RuleMetric): RuleItem => {
+  rs += 1;
+  return { id: `seed-r${rs}`, enabled: true, metric };
+};
 
 const dept = (
   id: string,
@@ -44,47 +51,94 @@ const p = (t: P): Person => ({
 });
 
 const departments: Department[] = [
-  dept("dept-eng", "Engineering", "#0f6b5c", "e01", {
-    mentor: {
-      weights: { skill: 40, location: 15, level: 25, capacity: 20 },
-      minLevelGap: 1,
-      sameDepartment: true,
-      maxAssigns: 4,
-    },
-    reviewer: {
-      weights: { skill: 45, location: 10, level: 15, capacity: 30 },
-      minLevelGap: 0,
-      sameDepartment: false,
-      maxAssigns: 8,
-    },
+  dept("dept-eng", "Engineering", "#5b21b6", "e01", {
+    mentor: [
+      R({ type: "score", factor: "skill", weight: 40 }),
+      R({ type: "score", factor: "level", weight: 25 }),
+      R({ type: "score", factor: "capacity", weight: 20 }),
+      R({ type: "score", factor: "location", weight: 15 }),
+      R({ type: "min-level-gap", gap: 1 }),
+      R({ type: "same-department" }),
+      R({ type: "max-assigns", max: 4 }),
+    ],
+    reviewer: [
+      R({ type: "score", factor: "skill", weight: 45 }),
+      R({ type: "score", factor: "capacity", weight: 30 }),
+      R({ type: "score", factor: "level", weight: 15 }),
+      R({ type: "score", factor: "location", weight: 10 }),
+      R({ type: "max-assigns", max: 8 }),
+    ],
   }),
   dept("dept-design", "Design", "#b45309", "d01", {
-    mentor: {
-      weights: { skill: 45, location: 15, level: 20, capacity: 20 },
-      minLevelGap: 1,
-      sameDepartment: false,
-      maxAssigns: 3,
-    },
-    reviewer: {
-      weights: { skill: 50, location: 10, level: 10, capacity: 30 },
-      minLevelGap: 0,
-      sameDepartment: false,
-      maxAssigns: 8,
-    },
+    mentor: [
+      R({ type: "score", factor: "skill", weight: 45 }),
+      R({ type: "score", factor: "level", weight: 20 }),
+      R({ type: "score", factor: "capacity", weight: 20 }),
+      R({ type: "score", factor: "location", weight: 15 }),
+      R({ type: "min-level-gap", gap: 1 }),
+      R({ type: "min-shared-skills", min: 1 }),
+      R({ type: "max-assigns", max: 3 }),
+    ],
+    reviewer: [
+      R({ type: "score", factor: "skill", weight: 50 }),
+      R({ type: "score", factor: "capacity", weight: 30 }),
+      R({ type: "score", factor: "level", weight: 10 }),
+      R({ type: "score", factor: "location", weight: 10 }),
+      R({ type: "max-assigns", max: 8 }),
+    ],
   }),
   dept("dept-data", "Data & AI", "#0c7489", "a01", {
-    mentor: {
-      weights: { skill: 35, location: 20, level: 25, capacity: 20 },
-      minLevelGap: 2,
-      sameDepartment: true,
-      maxAssigns: 5,
-    },
-    reviewer: {
-      weights: { skill: 40, location: 15, level: 15, capacity: 30 },
-      minLevelGap: 0,
-      sameDepartment: false,
-      maxAssigns: 8,
-    },
+    mentor: [
+      R({ type: "score", factor: "skill", weight: 35 }),
+      R({ type: "score", factor: "level", weight: 25 }),
+      R({ type: "score", factor: "location", weight: 20 }),
+      R({ type: "score", factor: "capacity", weight: 20 }),
+      R({ type: "min-level-gap", gap: 2 }),
+      R({ type: "same-department" }),
+      R({ type: "max-assigns", max: 5 }),
+    ],
+    reviewer: [
+      R({ type: "score", factor: "skill", weight: 40 }),
+      R({ type: "score", factor: "capacity", weight: 30 }),
+      R({ type: "score", factor: "location", weight: 15 }),
+      R({ type: "score", factor: "level", weight: 15 }),
+      R({ type: "max-assigns", max: 8 }),
+    ],
+  }),
+  dept("dept-growth", "Growth & Marketing", "#b23a48", "g01", {
+    mentor: [
+      R({ type: "score", factor: "skill", weight: 45 }),
+      R({ type: "score", factor: "location", weight: 20 }),
+      R({ type: "score", factor: "level", weight: 15 }),
+      R({ type: "score", factor: "capacity", weight: 20 }),
+      R({ type: "min-level-gap", gap: 1 }),
+      R({ type: "max-assigns", max: 3 }),
+    ],
+    reviewer: [
+      R({ type: "score", factor: "skill", weight: 40 }),
+      R({ type: "score", factor: "capacity", weight: 30 }),
+      R({ type: "score", factor: "location", weight: 15 }),
+      R({ type: "score", factor: "level", weight: 15 }),
+      R({ type: "max-assigns", max: 6 }),
+    ],
+  }),
+  dept("dept-cs", "Customer Success", "#33517a", "c01", {
+    mentor: [
+      R({ type: "score", factor: "location", weight: 30 }),
+      R({ type: "score", factor: "skill", weight: 30 }),
+      R({ type: "score", factor: "level", weight: 20 }),
+      R({ type: "score", factor: "capacity", weight: 20 }),
+      R({ type: "min-level-gap", gap: 1 }),
+      R({ type: "same-department" }),
+      R({ type: "max-assigns", max: 4 }),
+    ],
+    reviewer: [
+      R({ type: "score", factor: "skill", weight: 45 }),
+      R({ type: "score", factor: "capacity", weight: 30 }),
+      R({ type: "score", factor: "level", weight: 15 }),
+      R({ type: "score", factor: "location", weight: 10 }),
+      R({ type: "max-assigns", max: 8 }),
+    ],
   }),
 ];
 
@@ -96,6 +150,9 @@ const tribes: Tribe[] = [
   tribe("t-brand", "Brand", "dept-design", "d08"),
   tribe("t-ml", "ML Platform", "dept-data", "a01"),
   tribe("t-ana", "Analytics", "dept-data", "a08"),
+  tribe("t-acq", "Acquisition", "dept-growth", "g01"),
+  tribe("t-lc", "Lifecycle", "dept-growth", "g05"),
+  tribe("t-ecs", "Enterprise CS", "dept-cs", "c01"),
 ];
 
 const people: Person[] = [
@@ -146,6 +203,25 @@ const people: Person[] = [
   p(["a10", "Ivy Chen", "t-ana", 2, "Toronto", ["SQL", "dbt", "Statistics"], false, false, "a08", "a11"]),
   p(["a11", "Kwame Boateng", "t-ana", 5, "London", ["Spark", "SQL", "Statistics"], true, true, null, null]),
   p(["a12", "Léa Moreau", "t-ana", 1, "Paris", ["SQL", "Looker"], false, false, null, "a08"]),
+  // ── Growth & Marketing · Acquisition
+  p(["g01", "Maya Krishnan", "t-acq", 5, "Bengaluru", ["SEO", "Analytics", "Copywriting"], true, true, null, null]),
+  p(["g02", "Jonas Berg", "t-acq", 3, "Berlin", ["SEO", "Analytics"], false, false, "g01", "g04"]),
+  p(["g03", "Tessa Varga", "t-acq", 2, "London", ["Copywriting", "SEO"], false, false, "g01", "g05"]),
+  p(["g04", "Omar Aziz", "t-acq", 4, "London", ["Analytics", "SQL", "SEO"], false, true, "g01", "g05"]),
+  p(["g09", "Amelie Fontaine", "t-acq", 1, "Paris", ["Copywriting"], false, false, null, "g01"]),
+  // ── Growth & Marketing · Lifecycle
+  p(["g05", "Léonie Marchand", "t-lc", 5, "Paris", ["Email", "Lifecycle", "Analytics"], true, true, null, null]),
+  p(["g06", "David Kim", "t-lc", 3, "New York", ["Email", "Lifecycle"], false, false, "g05", "g04"]),
+  p(["g07", "Sofia Reyes", "t-lc", 2, "São Paulo", ["Lifecycle", "Copywriting"], false, false, "g05", "g04"]),
+  p(["g08", "Ethan Cole", "t-lc", 4, "Toronto", ["Analytics", "Email", "SQL"], false, true, "g05", null]),
+  // ── Customer Success · Enterprise CS
+  p(["c01", "Nadia Karim", "t-ecs", 5, "Toronto", ["Account Mgmt", "SQL", "Analytics"], true, true, null, null]),
+  p(["c02", "Ben Carter", "t-ecs", 3, "New York", ["Account Mgmt", "Analytics"], false, false, "c01", "c04"]),
+  p(["c03", "Ingrid Solberg", "t-ecs", 2, "London", ["Account Mgmt", "Copywriting"], false, false, "c01", "c04"]),
+  p(["c04", "Raul Mendes", "t-ecs", 4, "São Paulo", ["SQL", "Analytics", "Account Mgmt"], false, true, "c01", null]),
+  p(["c05", "Hana Suzuki", "t-ecs", 3, "Singapore", ["Analytics", "SQL"], false, false, "c01", "c04"]),
+  p(["c06", "George Papadopoulos", "t-ecs", 1, "Berlin", ["Account Mgmt"], false, false, null, "c01"]),
+  p(["c07", "Clara Jensen", "t-ecs", 4, "Berlin", ["Account Mgmt", "Analytics", "SQL"], true, false, "c01", "c04"]),
 ];
 
 export function seedState(): AppState {
@@ -156,8 +232,8 @@ export function seedState(): AppState {
     people,
     activity: [
       { id: "act-3", ts: Date.now() - 1000 * 60 * 42, text: "Beatriz Costa took Ivy Chen as mentee", tone: "success" },
-      { id: "act-2", ts: Date.now() - 1000 * 60 * 130, text: "Data & AI raised mentor level gap to +2", tone: "info" },
-      { id: "act-1", ts: Date.now() - 1000 * 60 * 300, text: "Noor Haddad was activated as a mentor", tone: "success" },
+      { id: "act-2", ts: Date.now() - 1000 * 60 * 130, text: "Data & AI added a +2 level-gap rule for mentors", tone: "info" },
+      { id: "act-1", ts: Date.now() - 1000 * 60 * 300, text: "Customer Success department onboarded", tone: "info" },
     ],
   };
 }

@@ -2,26 +2,30 @@ export type Role = "mentor" | "reviewer";
 
 export type Level = 1 | 2 | 3 | 4 | 5;
 
-/** A department's proposal policy for one role. Weights are relative; constraints are hard unless relaxed. */
-export interface RuleSet {
-  weights: {
-    skill: number;
-    location: number;
-    level: number;
-    capacity: number;
-  };
-  /** Candidate must be at least this many levels above the member. */
-  minLevelGap: number;
-  /** Candidate must belong to the same department. */
-  sameDepartment: boolean;
-  /** Max people one mentor/reviewer may carry. */
-  maxAssigns: number;
+export type RuleFactor = "skill" | "location" | "level" | "capacity";
+
+/**
+ * Rules are fully dynamic: a department's policy for a role is an ordered list
+ * of rule items. Scoring rules carry a weight; constraint rules are hard gates
+ * (relaxed one at a time by the engine when nobody qualifies).
+ */
+export type RuleMetric =
+  | { type: "score"; factor: RuleFactor; weight: number }
+  | { type: "min-level-gap"; gap: number }
+  | { type: "same-department" }
+  | { type: "max-assigns"; max: number }
+  | { type: "min-shared-skills"; min: number };
+
+export interface RuleItem {
+  id: string;
+  enabled: boolean;
+  metric: RuleMetric;
 }
 
-export interface DepartmentRules {
-  mentor: RuleSet;
-  reviewer: RuleSet;
-}
+export type DepartmentRules = {
+  mentor: RuleItem[];
+  reviewer: RuleItem[];
+};
 
 export interface Department {
   id: string;

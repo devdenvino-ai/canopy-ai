@@ -22,6 +22,7 @@ import {
   TableRow,
 } from "../components/ui";
 import { LevelBadge, RelationChip, SkillRow, StatusBadge } from "../components/bits";
+import { DeptGraph } from "../components/DeptGraph";
 
 type SortKey = "name" | "level";
 
@@ -34,6 +35,12 @@ export function MembersPage() {
   const [status, setStatus] = useState<"all" | "gaps" | "covered">("all");
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<1 | -1>(1);
+  const [view, setView] = useState<"table" | "graph">("table");
+  const [graphDept, setGraphDept] = useState<string>("");
+
+  const graphDeptObj = state.departments.find((d) => d.id === graphDept) ?? state.departments[0];
+  const graphTribeCount = state.tribes.filter((t) => t.departmentId === graphDeptObj?.id).length;
+  const graphPeopleCount = state.people.filter((p) => p.tribeId && state.tribes.some((t) => t.id === p.tribeId && t.departmentId === graphDeptObj?.id)).length;
 
   const tribeOptions = useMemo(
     () => state.tribes.filter((t) => deptId === "all" || t.departmentId === deptId),
@@ -95,7 +102,24 @@ export function MembersPage() {
 
   return (
     <div className="space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs font-medium text-muted-foreground">
+          {view === "table"
+            ? "Filterable directory of every member across tribes."
+            : "Interactive node graph — hierarchy plus mentor and reviewer links. Hover to trace, click to assign."}
+        </p>
+        <Seg
+          value={view}
+          onChange={setView}
+          options={[
+            { value: "table", label: "Table" },
+            { value: "graph", label: "Graph" },
+          ]}
+        />
+      </div>
       <Card className="anim-fade-up overflow-hidden">
+        {view === "table" ? (
+          <>
         <div className="flex flex-wrap items-center gap-2 border-b border-line p-3.5">
           <div className="flex h-9 items-center gap-2 rounded-md border border-border bg-card px-2.5 transition-colors focus-within:border-ring">
             <Search className="h-3.5 w-3.5 text-muted-foreground" />
@@ -238,6 +262,34 @@ export function MembersPage() {
             </TableBody>
           </Table>
         </div>
+          </>
+        ) : (
+          <>
+            <div className="flex flex-wrap items-center gap-2 border-b border-line p-3.5">
+              <Select value={graphDeptObj.id} onValueChange={setGraphDept}>
+                <SelectTrigger className="w-52">
+                  <SelectValue placeholder="Pick a department" />
+                </SelectTrigger>
+                <SelectContent>
+                  {state.departments.map((d) => (
+                    <SelectItem key={d.id} value={d.id}>
+                      <span className="flex items-center gap-2">
+                        <span className="h-2 w-2 rounded-full" style={{ backgroundColor: d.color }} />
+                        {d.name}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <span className="font-mono text-[11px] font-bold tabular-nums text-muted-foreground">
+                {graphTribeCount} tribes · {graphPeopleCount} people
+              </span>
+            </div>
+            <div className="p-4">
+              <DeptGraph dept={graphDeptObj} />
+            </div>
+          </>
+        )}
       </Card>
 
       <div className="flex items-center gap-2 px-1 text-[11.5px] text-muted-foreground">
