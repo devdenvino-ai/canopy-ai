@@ -37,7 +37,6 @@ export function MembersPage() {
   const [sortDir, setSortDir] = useState<1 | -1>(1);
   const [view, setView] = useState<"table" | "graph">("table");
   const [graphDept, setGraphDept] = useState<string>("");
-  const [graphDir, setGraphDir] = useState<"horizontal" | "vertical">("horizontal");
 
   const graphDeptObj = state.departments.find((d) => d.id === graphDept) ?? state.departments[0];
   const graphTribeCount = state.tribes.filter((t) => t.departmentId === graphDeptObj?.id).length;
@@ -286,20 +285,13 @@ export function MembersPage() {
               <span className="font-mono text-[11px] font-bold tabular-nums text-muted-foreground">
                 {graphTribeCount} tribes · {graphPeopleCount} people
               </span>
-              <span className="ml-auto">
-                <Seg
-                  size="sm"
-                  value={graphDir}
-                  onChange={setGraphDir}
-                  options={[
-                    { value: "horizontal", label: "Horizontal" },
-                    { value: "vertical", label: "Vertical" },
-                  ]}
-                />
+              <span className="ml-auto hidden items-center gap-1.5 text-[11px] font-semibold text-muted-foreground sm:flex">
+                <span className="h-0 w-4 border-t-2 border-[#7c3aed]" /> mentor
+                <span className="ml-2 h-0 w-4 border-t-2 border-dashed border-[#b45309]" /> reviewer
               </span>
             </div>
             <div className="p-4">
-              <DeptGraph dept={graphDeptObj} dir={graphDir} />
+              <DeptGraph dept={graphDeptObj} />
             </div>
           </>
         )}

@@ -1,391 +1,347 @@
 import { useMemo, useRef, useState } from "react";
-import { GraduationCap, ShieldCheck } from "lucide-react";
-import type { Department, Person, Tribe } from "../lib/types";
 import { useStore, useUI } from "../lib/store";
-import { initials, toneFor } from "../lib/utils";
-import { personIssues, personById } from "../lib/scoring";
+import { maxAssignsOf, personById, personIssues } from "../lib/scoring";
+import type { Department, Person } from "../lib/types";
+import { cn, initials, toneFor } from "../lib/utils";
 
-export type GraphDir = "horizontal" | "vertical";
+const W = 1160;
+const PADX = 16;
+const DEPT_W = 152;
+const DEPT_H = 54;
+const NODE_H = 38;
+const ROW_GAP = 6;
 
-const ell = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1).trimEnd() + "…" : s);
+type NodeInfo = { x: number; y: number; w: number; h: number };
 
-interface TipState {
-  x: number;
-  y: number;
-  person: Person;
+function fitName(name: string, max: number) {
+  if (name.length * 6.1 <= max) return name;
+  const n = Math.max(3, Math.floor((max - 12) / 6.1));
+  return name.slice(0, n) + "…";
 }
 
-interface NodeRect {
-  id: string;
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  cy: number;
+function fitLoc(loc: string) {
+  return loc.length > 20 ? loc.slice(0, 19) + "…" : loc;
 }
 
-/** Layouts both directions. Horizontal: dept left → tribes middle → members right. */
-function computeLayout(
-  dept: Department,
-  tribes: Tribe[],
-  byTribe: Record<string, Person[]>,
-  dir: GraphDir,
-) {
-  if (dir === "vertical") {
-    const colW = 252;
-    const W = Math.max(760, tribes.length * colW + 16);
-    const maxRows = Math.max(1, ...tribes.map((t) => byTribe[t.id]?.length ?? 0));
-    const H = 190 + maxRows * 46 + 40;
-    const deptX = W / 2 - 80;
-    const tribeNodes: NodeRect[] = tribes.map((t, i) => ({
-      id: t.id,
-      x: 16 + i * colW,
-      y: 122,
-      w: colW - 28,
-      h: 48,
-      cy: 146,
-    }));
-    const memberNodes: NodeRect[] = tribes.flatMap((t, ti) =>
-      (byTribe[t.id] ?? []).map((p, ri) => ({
-        id: p.id,
-        x: 16 + ti * colW + 12,
-        y: 196 + ri * 46,
-        w: colW - 52,
-        h: 40,
-        cy: 216 + ri * 46,
-      })),
-    );
-    return { W, H, dept: { x: deptX, y: 26, w: 160, h: 68, cy: 60 }, tribeNodes, memberNodes, dir };
-  }
-
-  // horizontal
-  const W = 768;
-  const ROW = 46;
-  const GAP = 18;
-  const PAD = 22;
-  const bands = tribes.map((t) => ({ tribe: t, h: Math.max((byTribe[t.id]?.length ?? 0) * ROW + 20, 68) }));
-  const H = Math.max(340, bands.reduce((s, b) => s + b.h, 0) + GAP * (bands.length - 1) + PAD * 2);
-  const deptY = H / 2 - 38;
-  let cursor = PAD;
-  const tribeNodes: NodeRect[] = [];
-  const memberNodes: NodeRect[] = [];
-  bands.forEach((b) => {
-    tribeNodes.push({ id: b.tribe.id, x: 238, y: cursor + b.h / 2 - 24, w: 192, h: 48, cy: cursor + b.h / 2 });
-    (byTribe[b.tribe.id] ?? []).forEach((p, i) => {
-      memberNodes.push({ id: p.id, x: 478, y: cursor + 10 + i * ROW, w: 278, h: 40, cy: cursor + 30 + i * ROW });
-    });
-    cursor += b.h + GAP;
-  });
-  return { W, H, dept: { x: 8, y: deptY, w: 176, h: 76, cy: H / 2 }, tribeNodes, memberNodes, dir };
-}
-
-export function DeptGraph({ dept, dir = "horizontal" }: { dept: Department; dir?: GraphDir }) {
+/** Vertical org graph: department on top → tribes in a row → member columns below. */
+export function DeptGraph({ dept }: { dept: Department }) {
   const { state } = useStore();
   const { openPerson } = useUI();
   const svgRef = useRef<SVGSVGElement>(null);
   const [hoverId, setHoverId] = useState<string | null>(null);
-  const [tip, setTip] = useState<TipState | null>(null);
+  const [tip, setTip] = useState<{ person: Person; x: number; y: number } | null>(null);
 
-  const tribes = useMemo(() => state.tribes.filter((t) => t.departmentId === dept.id), [state.tribes, dept.id]);
-  const byTribe = useMemo(() => {
-    const map: Record<string, Person[]> = {};
-    tribes.forEach((t) => {
-      map[t.id] = state.people.filter((p) => p.tribeId === t.id).sort((a, b) => b.level - a.level || a.name.localeCompare(b.name));
+  const layout = useMemo(() => {
+    const tribes = state.tribes.filter((t) => t.departmentId === dept.id);
+    const byTribe = new Map<string, Person[]>();
+    tribes.forEach((t) =>
+      byTribe.set(
+        t.id,
+        state.people.filter((p) => p.tribeId === t.id).sort((a, b) => a.name.localeCompare(b.name)),
+      ),
+    );
+
+    const cols = Math.max(1, tribes.length);
+    const colW = (W - PADX * 2) / cols;
+    const nodeW = Math.min(colW - 14, 236);
+    const tribeW = Math.min(nodeW - 30, 200);
+
+    const deptNode: NodeInfo = { x: PADX, y: 16, w: DEPT_W, h: DEPT_H };
+    const tribeY = deptNode.y + DEPT_H + 46;
+
+    const tribeNodes = tribes.map((t, i) => {
+      const cx = PADX + colW * (i + 0.5);
+      return {
+        tribe: t,
+        cx,
+        x: cx - tribeW / 2,
+        y: tribeY,
+        w: tribeW,
+        h: NODE_H,
+        count: byTribe.get(t.id)?.length ?? 0,
+      };
     });
-    return map;
-  }, [state.people, tribes]);
 
-  const layout = useMemo(() => computeLayout(dept, tribes, byTribe, dir), [dept, tribes, byTribe, dir]);
-  const { W, H } = layout;
-  const horizontal = dir === "horizontal";
+    const memberTop = tribeY + NODE_H + 34;
+    const memberNodes: (NodeInfo & { id: string })[] = [];
+    const byId = new Map<string, NodeInfo>();
+    let bottom = memberTop;
 
-  const nodeById = useMemo(() => {
-    const m = new Map<string, NodeRect>();
-    layout.tribeNodes.forEach((n) => m.set(n.id, n));
-    layout.memberNodes.forEach((n) => m.set(n.id, n));
-    return m;
-  }, [layout]);
-
-  const onMove = (e: React.MouseEvent, person: Person) => {
-    const rect = svgRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    setTip({
-      x: Math.min(Math.max(8, e.clientX - rect.left + 14), W - 232),
-      y: Math.min(Math.max(8, e.clientY - rect.top + 12), H - 118),
-      person,
+    tribes.forEach((t, i) => {
+      const members = byTribe.get(t.id) ?? [];
+      const x = PADX + colW * i + (colW - nodeW) / 2;
+      members.forEach((p, j) => {
+        const y = memberTop + j * (NODE_H + ROW_GAP);
+        const info: NodeInfo = { x, y, w: nodeW, h: NODE_H };
+        memberNodes.push({ ...info, id: p.id });
+        byId.set(p.id, info);
+        bottom = Math.max(bottom, y + NODE_H);
+      });
     });
-    setHoverId(person.id);
-  };
-  const clear = () => {
-    setTip(null);
-    setHoverId(null);
-  };
 
+    return { deptNode, tribeNodes, memberNodes, byId, H: bottom + 40, total: memberNodes.length };
+  }, [state, dept.id]);
+
+  const { deptNode, tribeNodes, memberNodes, byId, H, total } = layout;
+
+  const personOf = (id: string) => state.people.find((p) => p.id === id);
   const mentorOf = (p: Person) => personById(state, p.mentorId ?? null);
   const reviewerOf = (p: Person) => personById(state, p.reviewerId ?? null);
 
-  const related = (p: Person): Set<string> => {
-    const s = new Set<string>([p.id]);
-    if (p.mentorId) s.add(p.mentorId);
-    if (p.reviewerId) s.add(p.reviewerId);
-    state.people.forEach((o) => {
-      if (o.mentorId === p.id || o.reviewerId === p.id) s.add(o.id);
-    });
-    return s;
-  };
-  const activeSet = useMemo(() => {
-    if (!hoverId) return null;
-    const hp = state.people.find((p) => p.id === hoverId);
-    return hp ? related(hp) : null;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hoverId, state.people]);
+  /* ── edges ── */
 
-  const dim = (id: string) => (activeSet ? (activeSet.has(id) ? 1 : 0.22) : 1);
+  const deptEdges = tribeNodes.map((t) => {
+    const x1 = deptNode.x + DEPT_W / 2;
+    const y1 = deptNode.y + DEPT_H;
+    const dy = (t.y - y1) / 2;
+    return { key: t.tribe.id, d: `M ${x1} ${y1} C ${x1} ${y1 + dy}, ${t.cx} ${t.y - dy}, ${t.cx} ${t.y}` };
+  });
 
-  const linkPath = (from: NodeRect, to: NodeRect, kind: "mentor" | "reviewer") => {
-    const isTribeTarget = layout.tribeNodes.some((t) => t.id === to.id);
-    if (horizontal) {
-      if (isTribeTarget) {
-        // curve from member's left edge to the tribe node's right edge
-        return `M ${from.x} ${from.cy} C ${from.x - 96} ${from.cy}, ${to.x + to.w + 56} ${to.cy}, ${to.x + to.w} ${to.cy}`;
-      }
-      const bend = kind === "mentor" ? 78 : 116;
-      return `M ${from.x} ${from.cy} C ${from.x - bend} ${from.cy}, ${to.x - bend} ${to.cy}, ${to.x} ${to.cy}`;
-    }
-    const x1 = from.x;
-    const y1 = from.cy - from.h / 2;
-    const x2 = to.x;
-    const y2 = isTribeTarget ? to.y + to.h : to.cy - to.h / 2;
-    return `M ${x1} ${y1} C ${x1} ${y1 - (kind === "mentor" ? 30 : 46)}, ${x2} ${y2 + (kind === "mentor" ? 30 : 46)}, ${x2} ${y2}`;
-  };
-
-  const hierarchyPath = (x1: number, y1: number, x2: number, y2: number) => {
-    if (horizontal) {
-      const dx = Math.min(56, (x2 - x1) / 2);
-      return `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
-    }
-      const dy = Math.min(44, (y2 - y1) / 2);
-      return `M ${x1} ${y1} C ${x1} ${y1 + dy}, ${x2} ${y2 - dy}, ${x2} ${y2}`;
-  };
+  const spines = tribeNodes
+    .map((t) => {
+      const members = memberNodes.filter((m) => personOf(m.id)?.tribeId === t.tribe.id);
+      if (!members.length) return null;
+      const lastY = members[members.length - 1].y + NODE_H / 2;
+      return { key: t.tribe.id, d: `M ${t.cx} ${t.y + NODE_H} L ${t.cx} ${lastY}` };
+    })
+    .filter((s): s is { key: string; d: string } => s !== null);
 
   const memberLinks = useMemo(() => {
     const rows: { key: string; d: string; kind: "mentor" | "reviewer"; from: string; to: string }[] = [];
-    layout.memberNodes.forEach((n) => {
-      const p = personById(state, n.id);
+    memberNodes.forEach((n) => {
+      const p = personOf(n.id);
       if (!p) return;
       const m = mentorOf(p);
       const r = reviewerOf(p);
-      const mNode = m ? nodeById.get(m.id) : undefined;
-      const rNode = r ? nodeById.get(r.id) : undefined;
-      if (m && mNode) rows.push({ key: `${p.id}-m`, d: linkPath(n, mNode, "mentor"), kind: "mentor", from: p.id, to: m.id });
-      if (r && rNode) rows.push({ key: `${p.id}-r`, d: linkPath(n, rNode, "reviewer"), kind: "reviewer", from: p.id, to: r.id });
+      const mNode = m ? byId.get(m.id) : undefined;
+      const rNode = r ? byId.get(r.id) : undefined;
+      const curve = (a: NodeInfo, b: NodeInfo, mul: number) => {
+        const y1 = a.y + NODE_H / 2;
+        const y2 = b.y + NODE_H / 2;
+        const bow = Math.min(96, 30 + Math.abs(y2 - y1) * 0.18 + Math.abs(b.x - a.x) * 0.1) * mul;
+        return `M ${a.x} ${y1} C ${a.x - bow} ${y1}, ${b.x - bow} ${y2}, ${b.x} ${y2}`;
+      };
+      if (m && mNode) rows.push({ key: `${p.id}-m`, d: curve(n, mNode, 1), kind: "mentor", from: p.id, to: m.id });
+      if (r && rNode) rows.push({ key: `${p.id}-r`, d: curve(n, rNode, 1.35), kind: "reviewer", from: p.id, to: r.id });
     });
     return rows;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [layout, state.people, nodeById]);
+  }, [layout, state.people]);
+
+  /* ── hover tracing ── */
+
+  const hoverSet = useMemo(() => {
+    if (!hoverId) return null;
+    const s = new Set<string>([hoverId]);
+    memberLinks.forEach((l) => {
+      if (l.from === hoverId || l.to === hoverId) {
+        s.add(l.from);
+        s.add(l.to);
+      }
+    });
+    return s;
+  }, [hoverId, memberLinks]);
+
+  const dim = (id: string) => (hoverSet ? (hoverSet.has(id) ? 1 : 0.3) : 1);
+  const linkState = (l: { from: string; to: string }) =>
+    !hoverSet ? "idle" : l.from === hoverId || l.to === hoverId ? "hot" : "cold";
+
+  const onNodeEnter = (id: string, e: React.MouseEvent) => {
+    setHoverId(id);
+    const p = personOf(id);
+    if (!p || !svgRef.current) return;
+    const box = svgRef.current.getBoundingClientRect();
+    setTip({ person: p, x: e.clientX - box.left, y: e.clientY - box.top });
+  };
+  const onNodeLeave = () => {
+    setHoverId(null);
+    setTip(null);
+  };
 
   return (
     <div className="relative">
-      <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} className="block w-full" style={{ minHeight: 300 }}>
-        {/* hierarchy edges */}
-        {layout.tribeNodes.map((t, i) => (
+      <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} className="block w-full" style={{ minHeight: 320 }}>
+        {/* hierarchy: department → tribes */}
+        {deptEdges.map((e, i) => (
           <path
-            key={`dt-${t.id}`}
-            d={hierarchyPath(
-              horizontal ? layout.dept.x + layout.dept.w : layout.dept.x + layout.dept.w / 2,
-              horizontal ? layout.dept.cy : layout.dept.y + layout.dept.h,
-              horizontal ? t.x : t.x + t.w / 2,
-              horizontal ? t.cy : t.y,
-            )}
-            fill="none"
-            stroke="#ddd8e8"
-            strokeWidth={1.5}
-            strokeDasharray={1}
+            key={`de-${e.key}`}
+            d={e.d}
             pathLength={1}
+            fill="none"
+            stroke="#d9d3e6"
+            strokeWidth={1.6}
             className="anim-draw-line"
-            style={{ animationDelay: `${i * 70}ms` }}
+            style={{ animationDelay: `${i * 50}ms` }}
           />
         ))}
-        {layout.memberNodes.map((n, i) => {
-          const p = personById(state, n.id);
-          const tNode = p ? layout.tribeNodes.find((t) => t.id === p.tribeId) : undefined;
-          if (!tNode) return null;
-          return (
-            <path
-              key={`tm-${n.id}`}
-              d={hierarchyPath(
-                horizontal ? tNode.x + tNode.w : tNode.x + tNode.w / 2,
-                horizontal ? tNode.cy : tNode.y + tNode.h,
-                horizontal ? n.x : n.x,
-                horizontal ? n.cy : n.cy - n.h / 2,
-              )}
-              fill="none"
-              stroke="#ddd8e8"
-              strokeWidth={1.2}
-              strokeDasharray={1}
-              pathLength={1}
-              className="anim-draw-line"
-              style={{ animationDelay: `${120 + Math.min(i, 12) * 40}ms` }}
-            />
-          );
-        })}
+        {/* tribe spines down the member columns */}
+        {spines.map((s, i) => (
+          <path
+            key={`sp-${s.key}`}
+            d={s.d}
+            pathLength={1}
+            fill="none"
+            stroke="#e4e0ee"
+            strokeWidth={1.6}
+            className="anim-draw-line"
+            style={{ animationDelay: `${140 + i * 50}ms` }}
+          />
+        ))}
 
-        {/* mentor / reviewer relationship links */}
-        {memberLinks.map((l) => {
-          const on = activeSet ? activeSet.has(l.from) && activeSet.has(l.to) : true;
-          return (
-            <path
-              key={l.key}
-              d={l.d}
-              fill="none"
-              stroke={l.kind === "mentor" ? "#5b21b6" : "#b45309"}
-              strokeWidth={hoverId && on ? 2.2 : 1.6}
-              strokeDasharray={l.kind === "reviewer" ? "5 4" : undefined}
-              opacity={on ? (l.kind === "mentor" ? 0.8 : 0.75) : 0.08}
-              style={{ transition: "opacity 0.2s ease, stroke-width 0.2s ease" }}
-            />
-          );
-        })}
+        {/* mentor / reviewer links */}
+        <g className="anim-fade-in" style={{ animationDelay: "260ms" }}>
+          {memberLinks.map((l) => {
+            const st = linkState(l);
+            const color = l.kind === "mentor" ? "#7c3aed" : "#b45309";
+            return (
+              <path
+                key={l.key}
+                d={l.d}
+                fill="none"
+                stroke={color}
+                strokeWidth={st === "hot" ? 2.4 : 1.6}
+                strokeDasharray={l.kind === "reviewer" ? "5 4" : undefined}
+                pointerEvents="none"
+                style={{
+                  transition: "opacity 0.18s ease, stroke-width 0.18s ease",
+                  opacity: st === "cold" ? 0.1 : st === "hot" ? 0.95 : l.kind === "mentor" ? 0.5 : 0.45,
+                }}
+              />
+            );
+          })}
+        </g>
 
-        {/* dept node */}
+        {/* department node */}
         <g className="anim-node-in">
-          <rect x={layout.dept.x} y={layout.dept.y} width={layout.dept.w} height={layout.dept.h} rx={14} fill="#191227" />
-          <circle cx={layout.dept.x + 24} cy={layout.dept.cy} r={5} fill={dept.color} className="anim-sparkle" style={{ transformOrigin: `${layout.dept.x + 24}px ${layout.dept.cy}px` }} />
-          <text x={layout.dept.x + 40} y={layout.dept.cy - 4} fontSize={13} fontWeight={700} fill="#f3eefc" fontFamily="Bricolage Grotesque, sans-serif">
-            {ell(dept.name, horizontal ? 15 : 17)}
+          <rect x={deptNode.x} y={deptNode.y} width={DEPT_W} height={DEPT_H} rx={12} fill="#191227" />
+          <text
+            x={deptNode.x + 16}
+            y={deptNode.y + 24}
+            fontSize={12.5}
+            fontWeight={700}
+            fill="#f3eefc"
+            fontFamily="Bricolage Grotesque, sans-serif"
+          >
+            {fitName(dept.name, DEPT_W - 34)}
           </text>
-          <text x={layout.dept.x + 40} y={layout.dept.cy + 14} fontSize={10} fill="#9d94bd" fontFamily="JetBrains Mono, monospace">
-            {tribes.length} tribes · {layout.memberNodes.length} people
+          <text x={deptNode.x + 16} y={deptNode.y + 41} fontSize={10} fill="#9d94bd" fontFamily="JetBrains Mono, monospace">
+            {tribeNodes.length} tribes · {total} people
           </text>
         </g>
 
         {/* tribe nodes */}
-        {layout.tribeNodes.map((t, i) => {
-          const tribe = tribes.find((x) => x.id === t.id)!;
-          const lead = personById(state, tribe.leadId);
-          const count = byTribe[tribe.id]?.length ?? 0;
-          return (
-            <g key={t.id} className="anim-node-in" style={{ animationDelay: `${i * 60}ms` }}>
-              <rect x={t.x} y={t.y} width={t.w} height={t.h} rx={11} fill="#ece9f3" stroke="#ddd8e8" />
-              <circle cx={t.x + 18} cy={t.cy} r={4} fill={dept.color} />
-              <text x={t.x + 30} y={t.cy - 2} fontSize={11.5} fontWeight={700} fill="#201a2e">
-                {ell(tribe.name, 16)}
-              </text>
-              <text x={t.x + 30} y={t.cy + 13} fontSize={9} fill="#6a6480" fontFamily="JetBrains Mono, monospace">
-                {count} ppl{lead ? ` · ${ell(lead.name.split(" ")[0], 10)}` : ""}
-              </text>
-            </g>
-          );
-        })}
+        {tribeNodes.map((t, i) => (
+          <g key={t.tribe.id} className="anim-node-in" style={{ animationDelay: `${80 + i * 45}ms` }}>
+            <rect x={t.x} y={t.y} width={t.w} height={t.h} rx={10} fill="#ece9f3" stroke="#ddd8e8" />
+            <circle cx={t.x + 15} cy={t.y + NODE_H / 2} r={4} fill={dept.color} />
+            <text x={t.x + 27} y={t.y + NODE_H / 2 - 1.5} fontSize={11.5} fontWeight={700} fill="#201a2e">
+              {fitName(t.tribe.name, t.w - 44)}
+            </text>
+            <text
+              x={t.x + 27}
+              y={t.y + NODE_H / 2 + 12}
+              fontSize={9}
+              fill="#6a6480"
+              fontFamily="JetBrains Mono, monospace"
+            >
+              {t.count} member{t.count === 1 ? "" : "s"}
+            </text>
+          </g>
+        ))}
 
         {/* member nodes */}
-        {layout.memberNodes.map((n, i) => {
-          const p = personById(state, n.id)!;
+        {memberNodes.map((n, i) => {
+          const p = personOf(n.id);
+          if (!p) return null;
           const issues = personIssues(p);
-          const mentor = mentorOf(p);
-          const reviewer = reviewerOf(p);
           const tone = toneFor(p.name);
-          const labelX = n.x + 44;
+          const hot = hoverId === p.id;
           return (
             <g
-              key={n.id}
+              key={p.id}
               className="anim-node-in cursor-pointer"
-              style={{ animationDelay: `${140 + Math.min(i, 14) * 35}ms`, opacity: dim(n.id), transition: "opacity 0.2s ease" }}
-              onMouseMove={(e) => onMove(e, p)}
-              onMouseLeave={clear}
-              onClick={() => openPerson(p.id, issues[0] ?? "mentor")}
+              style={{ animationDelay: `${160 + i * 22}ms`, opacity: dim(p.id), transition: "opacity 0.18s ease" }}
+              onClick={() => openPerson(p.id)}
+              onMouseEnter={(e) => onNodeEnter(p.id, e)}
+              onMouseLeave={onNodeLeave}
             >
               <rect
                 x={n.x}
                 y={n.y}
                 width={n.w}
-                height={n.h}
+                height={NODE_H}
                 rx={10}
-                fill={hoverId === p.id ? "#f3eefc" : "#fcfbfe"}
-                stroke={hoverId === p.id ? "#7c3aed" : "#ddd8e8"}
-                strokeWidth={hoverId === p.id ? 1.5 : 1}
-                style={{ transition: "fill 0.15s ease, stroke 0.15s ease" }}
+                fill={hot ? "#f3eefc" : "#fcfbfe"}
+                stroke={hot ? "#7c3aed" : "#ddd8e8"}
+                strokeWidth={hot ? 1.6 : 1}
               />
-              <rect x={n.x} y={n.y + 6} width={4} height={n.h - 12} rx={2} fill={issues.length ? "#b45309" : "#5b21b6"} opacity={issues.length ? 1 : 0.45} />
-              <circle cx={n.x + 24} cy={n.cy} r={11} fill={tone.bg} />
-              <text x={n.x + 24} y={n.cy + 3.5} fontSize={8.5} fontWeight={800} fill={tone.fg} textAnchor="middle">
+              <rect
+                x={n.x}
+                y={n.y}
+                width={4}
+                height={NODE_H}
+                rx={2}
+                fill={issues.length ? "#b45309" : "#5b21b6"}
+                opacity={issues.length ? 1 : 0.45}
+              />
+              <circle cx={n.x + 24} cy={n.y + NODE_H / 2} r={11} fill={tone.bg} />
+              <text
+                x={n.x + 24}
+                y={n.y + NODE_H / 2 + 3}
+                fontSize={8.5}
+                fontWeight={800}
+                fill={tone.fg}
+                textAnchor="middle"
+              >
                 {initials(p.name)}
               </text>
-              <text x={labelX} y={n.cy - 2} fontSize={11} fontWeight={700} fill="#201a2e">
-                {ell(p.name, 24)}
+              <text x={n.x + 42} y={n.y + 16.5} fontSize={11} fontWeight={700} fill="#201a2e">
+                {fitName(p.name, n.w - 108)}
               </text>
-              <text x={labelX} y={n.cy + 13} fontSize={9} fill="#6a6480" fontFamily="JetBrains Mono, monospace">
-                L{p.level} · {ell(p.location, 14)}
+              <text x={n.x + 42} y={n.y + 30.5} fontSize={9} fill="#6a6480" fontFamily="JetBrains Mono, monospace">
+                L{p.level} · {fitLoc(p.location)}
               </text>
-              {/* level + role chips */}
-              <rect x={n.x + n.w - 56} y={n.cy - 8} width={17} height={15} rx={4} fill="#ece4fa" />
-              <text x={n.x + n.w - 47.5} y={n.cy + 3} fontSize={8} fontWeight={800} fill="#5b21b6" textAnchor="middle">
-                L{p.level}
-              </text>
-              {mentor && (
-                <g opacity={activeSet && activeSet.has(mentor.id) ? 1 : 0.9}>
-                  <rect x={n.x + n.w - 36} y={n.cy - 8} width={15} height={15} rx={4} fill="#ece4fa" />
-                  <text x={n.x + n.w - 28.5} y={n.cy + 3.5} fontSize={8} fontWeight={800} fill="#5b21b6" textAnchor="middle">
+              {p.isMentor && (
+                <>
+                  <rect x={n.x + n.w - 40} y={n.y + 9} width={14} height={13} rx={4} fill="#ece4fa" />
+                  <text x={n.x + n.w - 33} y={n.y + 18.5} fontSize={8} fontWeight={800} fill="#5b21b6" textAnchor="middle">
                     M
                   </text>
-                </g>
+                </>
               )}
-              {reviewer && (
-                <g>
-                  <rect x={n.x + n.w - 18} y={n.cy - 8} width={15} height={15} rx={4} fill="#f7e8d4" />
-                  <text x={n.x + n.w - 10.5} y={n.cy + 3.5} fontSize={8} fontWeight={800} fill="#b45309" textAnchor="middle">
+              {p.isReviewer && (
+                <>
+                  <rect x={n.x + n.w - 22} y={n.y + 9} width={14} height={13} rx={4} fill="#f7e8d4" />
+                  <text x={n.x + n.w - 15} y={n.y + 18.5} fontSize={8} fontWeight={800} fill="#b45309" textAnchor="middle">
                     R
                   </text>
-                </g>
+                </>
               )}
             </g>
           );
         })}
       </svg>
 
-      {/* legend */}
-      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-[11px] font-semibold text-muted-foreground">
-        <span className="flex items-center gap-1.5">
-          <GraduationCap className="h-3.5 w-3.5 text-primary" />
-          <span className="inline-block h-0 w-5 border-t-2 border-primary" /> mentor → mentee
-        </span>
-        <span className="flex items-center gap-1.5">
-          <ShieldCheck className="h-3.5 w-3.5 text-accent" />
-          <span className="inline-block h-0 w-5 border-t-2 border-dashed border-accent" /> reviewer → member
-        </span>
-        <span className="ml-auto hidden font-mono text-[10px] sm:block">hover to trace · click to assign</span>
-      </div>
-
       {/* tooltip */}
       {(() => {
         if (!tip) return null;
         const tm = mentorOf(tip.person);
         const tr = reviewerOf(tip.person);
+        const tribe = state.tribes.find((t) => t.id === tip.person.tribeId);
+        const cap = maxAssignsOf(state, tip.person, "mentor");
+        const left = Math.min(Math.max(12, tip.x + 16), W - 250);
+        const top = Math.min(Math.max(8, tip.y - 12), Math.max(8, H - 150));
         return (
-        <div
-          className="anim-pop-in pointer-events-none absolute z-20 w-[224px] rounded-lg border border-border bg-popover p-3 shadow-pop"
-          style={{ left: tip.x, top: tip.y }}
-        >
-          <div className="flex items-center gap-2">
-            <span
-              className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-[10px] font-bold"
-              style={{ backgroundColor: toneFor(tip.person.name).bg, color: toneFor(tip.person.name).fg }}
-            >
-              {initials(tip.person.name)}
-            </span>
-            <div className="min-w-0">
-              <p className="truncate text-xs font-bold" title={tip.person.name}>
-                {tip.person.name}
-              </p>
-              <p className="font-mono text-[10px] text-muted-foreground">
-                L{tip.person.level} · {tip.person.location}
-              </p>
-            </div>
-          </div>
-          <div className="mt-2 space-y-1 text-[11px]">
-            <p className="flex items-center gap-1.5 text-muted-foreground">
-              <GraduationCap className="h-3 w-3 shrink-0 text-primary" />
-              <span className="truncate">
+          <div
+            className="pointer-events-none absolute z-10 w-60 rounded-lg border border-border bg-popover p-3 shadow-pop"
+            style={{ left, top }}
+          >
+            <p className="truncate text-[13px] font-bold">{tip.person.name}</p>
+            <p className="truncate font-mono text-[10.5px] text-muted-foreground">
+              L{tip.person.level} · {tribe?.name ?? "—"} · {tip.person.location}
+            </p>
+            <div className="mt-2 space-y-1 text-[11.5px] font-medium text-muted-foreground">
+              <p className="truncate">
                 {tm ? (
                   <>
                     Mentor · <b className="text-foreground">{tm.name}</b>
@@ -393,11 +349,8 @@ export function DeptGraph({ dept, dir = "horizontal" }: { dept: Department; dir?
                 ) : (
                   <b className="text-accent">No mentor yet</b>
                 )}
-              </span>
-            </p>
-            <p className="flex items-center gap-1.5 text-muted-foreground">
-              <ShieldCheck className="h-3 w-3 shrink-0 text-accent" />
-              <span className="truncate">
+              </p>
+              <p className="truncate">
                 {tr ? (
                   <>
                     Reviewer · <b className="text-foreground">{tr.name}</b>
@@ -405,12 +358,35 @@ export function DeptGraph({ dept, dir = "horizontal" }: { dept: Department; dir?
                 ) : (
                   <b className="text-accent">No reviewer yet</b>
                 )}
-              </span>
+              </p>
+              {tip.person.isMentor && (
+                <p className="truncate text-primary">
+                  Mentor pool · cap {cap}
+                </p>
+              )}
+            </div>
+            <p className="mt-2 border-t border-line pt-1.5 text-[10px] font-semibold text-muted-foreground/80">
+              Click to manage assignments
             </p>
           </div>
-        </div>
         );
       })()}
+
+      {/* legend */}
+      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 px-1 text-[11px] font-semibold text-muted-foreground">
+        <span className="flex items-center gap-1.5">
+          <span className="h-0 w-5 border-t-2 border-[#7c3aed]" /> mentor → mentee
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="h-0 w-5 border-t-2 border-dashed border-[#b45309]" /> reviewer → member
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="h-2.5 w-1 rounded-full bg-accent" /> open assignment
+        </span>
+        <span className="ml-auto font-mono text-[10px] font-medium normal-case">
+          hover to trace · click a member to assign
+        </span>
+      </div>
     </div>
   );
 }
