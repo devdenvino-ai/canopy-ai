@@ -231,13 +231,3 @@ export const usePOSStore = create<POSState>((set, get) => ({
     });
   },
 }));
-
-export interface AppProviderProps {
-  children: ReactNode;
-}
-
-export interface AppProviderProps { children: ReactNode; }
-
-export function AppProviders({ children }: AppProviderProps) {
-  return <>{children}</>;
-}

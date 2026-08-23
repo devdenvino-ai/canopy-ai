@@ -1,6 +1,5 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { Toaster } from "sonner";
-import { AppProviders } from "./lib/store";
 import { Topbar } from "./components/layout";
 import { usePOSStore } from "./lib/store";
 import { AdminDashboard } from "./pages/AdminDashboard";
@@ -64,9 +63,5 @@ function Shell() {
 }
 
 export default function App() {
-  return (
-    <AppProviders>
-      <Shell />
-    </AppProviders>
-  );
+  return <Shell />;
 }
